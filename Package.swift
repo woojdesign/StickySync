@@ -12,16 +12,12 @@ let package = Package(
         .library(name: "NotesKit", targets: ["NotesKit"])
     ],
     targets: [
-        // Platform-agnostic model + persistence.
-        // This target imports only Foundation — no AppKit — so a future
-        // iOS app and the CloudKit sync layer can reuse it unchanged.
+        // Platform-agnostic model + persistence (Foundation + CoreData, no UI
+        // framework) so the macOS app and a future iOS app reuse it unchanged.
+        // The app itself lives in the Xcode project (StickySync/) and links
+        // this NotesKit library product.
         .target(
             name: "NotesKit"
-        ),
-        // The macOS app: AppKit floating-window UI on top of NotesKit.
-        .executableTarget(
-            name: "StickySync",
-            dependencies: ["NotesKit"]
         ),
         .testTarget(
             name: "NotesKitTests",

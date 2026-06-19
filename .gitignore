@@ -1,7 +1,13 @@
+# Swift Package Manager
 .build/
 .swiftpm/
+
+# Build artifacts
 *.app/
-*.xcodeproj
-*.xcworkspace
 DerivedData/
+
+# Xcode user-specific state (track the .xcodeproj itself, not these)
+xcuserdata/
+*.xcuserstate
+
 .DS_Store

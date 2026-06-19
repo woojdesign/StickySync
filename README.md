@@ -1,116 +1,77 @@
 # StickySync
 
-A modern, sync-ready sticky-notes app for macOS. Like the built-in Stickies,
-but with a cleaner UI, on-note color and font controls, and an architecture
-built so cross-device sync drops in without a rewrite.
+A modern, sync-ready sticky-notes app for macOS — like the built-in Stickies,
+but with iCloud sync across your devices, on-note color and font controls, and
+a cleaner UI.
 
 ## Status
 
-**Phase 1 — local, runs today.** Everything works on one Mac, no account, no
-network. The data model and the store seam are already sync-shaped, so Phase 2
-(iCloud sync) is an additive change, not a rewrite.
+- **Local app** — done: borderless rounded notes, hover-revealed color palette
+  and font/size pickers, drag / resize / double-click-to-roll-up, soft-delete,
+  persistence.
+- **iCloud sync** — working: notes sync across your Macs via CloudKit
+  (`NSPersistentCloudKitContainer`). Window geometry stays device-local.
 
-## Run it
+## Layout
+
+```
+.
+├── Package.swift          # NotesKit Swift package (model + stores)
+├── Sources/NotesKit/      # platform-agnostic: Note, NoteStore, palette, fonts
+├── Tests/NotesKitTests/   # round-trip tests (swift test)
+└── StickySync/            # the macOS app (Xcode project)
+    ├── StickySync.xcodeproj
+    └── StickySync/        # AppKit UI; links NotesKit; carries the entitlements
+```
+
+`NotesKit` is a Swift package (Foundation + CoreData, no UI framework) so the
+Mac app — and a future iOS app — reuse it unchanged. Persistence sits behind a
+`NoteStore` protocol with two implementations: `JSONNoteStore` (local) and
+`CloudKitNoteStore` (Core Data + CloudKit). The Xcode app links the `NotesKit`
+library product and supplies the AppKit UI.
+
+Two deliberate model decisions: window geometry is device-local (never synced);
+colors and fonts are stored as stable tokens (not values/indexes) for light/dark
+theming, palette reorder-safety, and cross-device font fidelity.
+
+## Build & run
 
 ```sh
-swift run --package-path ~/Developer/StickySync
-# or, after a build:
-~/Developer/StickySync/.build/debug/StickySync
+open StickySync/StickySync.xcodeproj   # then ⌘R, destination: My Mac
 ```
 
-Or open it in Xcode: `open ~/Developer/StickySync/Package.swift`.
+For sync, the app target needs (already configured):
+- **iCloud → CloudKit** capability, container `iCloud.design.wooj.StickySync`
+- **Push Notifications** capability
+- **App Sandbox → Outgoing Connections (Client)**
+- the **`CLOUDKIT`** flag in *Active Compilation Conditions* (Debug + Release).
+  Without it the app falls back to the local `JSONNoteStore`.
+- the Mac signed into iCloud.
 
-### What you can do
+Test the model layer without Xcode:
 
-- **New note** — ⌘N. Notes cascade onto the screen.
-- **Edit** — just type. Plain text, full undo/redo, cut/copy/paste.
-- **Recolor** — hover a note, click the palette button, pick a color. Seven
-  curated tints, each with a readable text color in both light and dark mode.
-- **Change font** — hover, click **Aa**, pick a font (previewed in itself) and
-  nudge the size. Curated, platform-safe fonts only.
-- **Move** — drag the title bar.
-- **Resize** — drag any edge.
-- **Roll up / down** — double-click the title bar.
-- **Delete** — hover, click ✕ (a recoverable soft-delete).
-
-Notes, colors, fonts, sizes, collapse state, and per-window geometry persist
-across launches.
-
-### Where data lives
-
-`~/Library/Application Support/StickySync/store.json`
-
-## Architecture
-
-```
-Package.swift
-Sources/
-  NotesKit/        ← platform-agnostic: Foundation only, no AppKit
-    Note            synced fields (id, content, colorToken, fontName, …)
-    NoteLayout      device-local window geometry (never synced)
-    Palette         curated colors as light/dark hex pairs
-    FontCatalog     curated, cross-device-safe fonts
-    NoteStore       the persistence protocol — the seam sync slots into
-    JSONNoteStore   Phase 1 local implementation
-  StickySync/      ← the macOS app (AppKit)
-    main / AppDelegate         app + window lifecycle, menu
-    NoteWindow / NoteContentView   borderless rounded note, hover chrome
-    NoteWindowController       binds a note to its window and the store
-    ColorPaletteController     on-note color popover
-    FontPickerController       on-note font + size popover
-    Appearance                 NotesKit data → NSColor / NSFont
+```sh
+swift test     # NotesKit round-trip tests
 ```
 
-The rule that makes everything later cheap: **`NotesKit` imports only
-Foundation.** A future iPhone app and the CloudKit layer reuse it untouched —
-only the UI is platform-specific.
+## Distributing it to someone else
 
-Two deliberate decisions baked into the model:
+A direct-download Mac app must be **signed with a Developer ID Application
+certificate and notarized by Apple**, or Gatekeeper blocks it. High level:
 
-- **Window position/size is device-local** (`NoteLayout`), never synced — your
-  screens differ. Content, color, font, and collapse state sync.
-- **Colors and fonts are stored as stable tokens, not values/indexes.** Lets
-  light/dark mode remap colors, keeps the palette reorder-safe, and keeps a
-  note rendering identically on every device.
+1. Make sure `CLOUDKIT` is set for the **Release** config too.
+2. **Deploy the CloudKit schema to Production** (CloudKit Console → Deploy
+   Schema Changes) — distributed builds use the Production environment, not
+   Development.
+3. Xcode → **Product ▸ Archive** → **Distribute App ▸ Direct Distribution**
+   (Developer ID). Xcode signs, uploads for notarization, and staples.
+4. Export the notarized `.app`, zip or wrap it in a `.dmg`, and host it.
+5. Each recipient signs into their own iCloud account; their notes sync across
+   their own devices (shared notes would be a later CloudKit-sharing feature).
+
+The Mac App Store is a separate path (App Store Connect + review).
 
 ## Roadmap
 
-### Phase 2 — iCloud sync (store written; activation needs an Apple Developer account)
-
-The sync store already exists: `CloudKitNoteStore` (in `NotesKit`) backs notes
-with Core Data + `NSPersistentCloudKitContainer` using a programmatic model,
-verified in-memory by the tests (`swift test`). It's a drop-in `NoteStore` and
-already fires `onChange` on `NSPersistentStoreRemoteChange` so incoming edits
-refresh open windows (`AppDelegate.reconcileWindows` consumes it). Window
-geometry stays device-local in `layouts.json` — only notes go to CloudKit.
-
-What remains is purely signing/capability setup, which a plain SwiftPM binary
-can't carry (needs an Apple Developer Program membership, $99/yr):
-
-1. In Xcode, make a macOS **app target** and add `NotesKit` as a local package
-   dependency (the `make-app.sh` bundle is the staging point for this).
-2. Signing & Capabilities → add **iCloud** → **CloudKit**, create the container
-   `iCloud.design.wooj.StickySync` (must match `CloudKitNoteStore`'s
-   `containerIdentifier`). This writes the entitlements
-   (`com.apple.developer.icloud-container-identifiers`, `icloud-services`,
-   `aps-environment`).
-3. Switch `AppDelegate.store` from `JSONNoteStore()` to `CloudKitNoteStore()`.
-   Nothing else in the UI changes.
-4. Run the signed app on two Macs signed into the same iCloud account.
-
-Conflict policy for v1: last-writer-wins per note (we already stamp
-`modifiedAt`). Single user across your own devices rarely edits the same note
-within seconds, so this is fine. Character-level CRDT merging is a later option
-only if live collaborative editing is ever wanted.
-
-### Phase 3 — iPhone
-
-Add an iOS app target on top of the same `NotesKit`. Sync is already there via
-CloudKit. iOS has no floating desktop windows, so the phone UI is a grid/list
-(plus a home-screen widget) — a new view layer, not new data.
-
-### Phase 4 — sharing
-
-`NSPersistentCloudKitContainer` supports a shared database scope. Adding "share
-this note with someone" is enabling that scope + a share sheet — a supported
-extension point, not a re-architecture.
+- iPhone app on the same `NotesKit`.
+- CloudKit sharing — share a note with another person.
