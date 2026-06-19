@@ -6,6 +6,11 @@ let package = Package(
     platforms: [
         .macOS(.v13)
     ],
+    products: [
+        // Expose NotesKit as a library so an external consumer — the Xcode
+        // app target — can link it. Without this, Xcode sees no products.
+        .library(name: "NotesKit", targets: ["NotesKit"])
+    ],
     targets: [
         // Platform-agnostic model + persistence.
         // This target imports only Foundation — no AppKit — so a future
