@@ -17,6 +17,10 @@ let package = Package(
         .executableTarget(
             name: "StickySync",
             dependencies: ["NotesKit"]
+        ),
+        .testTarget(
+            name: "NotesKitTests",
+            dependencies: ["NotesKit"]
         )
     ]
 )

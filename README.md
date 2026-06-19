@@ -75,27 +75,28 @@ Two deliberate decisions baked into the model:
 
 ## Roadmap
 
-### Phase 2 — iCloud sync (needs an Apple Developer account)
+### Phase 2 — iCloud sync (store written; activation needs an Apple Developer account)
 
-Sync is gated on two things that can't be done from a plain SwiftPM binary:
-an Apple Developer Program membership ($99/yr) and a code-signed app bundle
-with the iCloud capability. The code change itself is small because of the
-`NoteStore` seam.
+The sync store already exists: `CloudKitNoteStore` (in `NotesKit`) backs notes
+with Core Data + `NSPersistentCloudKitContainer` using a programmatic model,
+verified in-memory by the tests (`swift test`). It's a drop-in `NoteStore` and
+already fires `onChange` on `NSPersistentStoreRemoteChange` so incoming edits
+refresh open windows (`AppDelegate.reconcileWindows` consumes it). Window
+geometry stays device-local in `layouts.json` — only notes go to CloudKit.
 
-1. In Xcode, make a macOS **app target** (or add an app target to this package)
-   and add `NotesKit` as a local package dependency.
-2. Signing & Capabilities → add **iCloud** → **CloudKit**, create a container
-   like `iCloud.design.wooj.StickySync`. This writes the entitlements
+What remains is purely signing/capability setup, which a plain SwiftPM binary
+can't carry (needs an Apple Developer Program membership, $99/yr):
+
+1. In Xcode, make a macOS **app target** and add `NotesKit` as a local package
+   dependency (the `make-app.sh` bundle is the staging point for this).
+2. Signing & Capabilities → add **iCloud** → **CloudKit**, create the container
+   `iCloud.design.wooj.StickySync` (must match `CloudKitNoteStore`'s
+   `containerIdentifier`). This writes the entitlements
    (`com.apple.developer.icloud-container-identifiers`, `icloud-services`,
-   plus `aps-environment` for push).
-3. Add a Core Data model (programmatic or `.xcdatamodeld`) with a `CDNote`
-   entity mirroring `Note`, and write a `CloudKitNoteStore: NoteStore` backed
-   by `NSPersistentCloudKitContainer`. CloudKit constraints: every attribute
-   optional or defaulted, no unique constraints.
-4. Point `AppDelegate.store` at `CloudKitNoteStore()` instead of
-   `JSONNoteStore()`. Nothing else in the UI changes. Fire `onChange` when the
-   container posts `NSPersistentStoreRemoteChange` so incoming edits refresh
-   open windows (the hook is already wired in `AppDelegate.reconcileWindows`).
+   `aps-environment`).
+3. Switch `AppDelegate.store` from `JSONNoteStore()` to `CloudKitNoteStore()`.
+   Nothing else in the UI changes.
+4. Run the signed app on two Macs signed into the same iCloud account.
 
 Conflict policy for v1: last-writer-wins per note (we already stamp
 `modifiedAt`). Single user across your own devices rarely edits the same note
