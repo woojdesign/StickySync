@@ -2,7 +2,13 @@ import AppKit
 import NotesKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    // The Xcode app target defines CLOUDKIT (Active Compilation Conditions) so
+    // it syncs; the SwiftPM build and tests have no entitlements and stay local.
+    #if CLOUDKIT
+    let store: NoteStore = CloudKitNoteStore()
+    #else
     let store: NoteStore = JSONNoteStore()
+    #endif
     private var controllers: [UUID: NoteWindowController] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
