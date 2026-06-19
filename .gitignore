@@ -5,6 +5,8 @@
 # Build artifacts
 *.app/
 DerivedData/
+build/
+*.xcarchive
 
 # Xcode user-specific state (track the .xcodeproj itself, not these)
 xcuserdata/
