@@ -98,6 +98,25 @@ public final class CloudKitNoteStore: NoteStore {
                 NSLog("StickySync: Core Data store failed to load: \(error)")
             }
         }
+
+        #if DEBUG
+        // One-time schema bootstrap. Run a *Development* (Xcode) build with the
+        // env var INIT_CK_SCHEMA=1 to (re)create the CloudKit schema from the
+        // current model, then deploy Development → Production in the CloudKit
+        // Console. Production can't create fields at runtime, so any new model
+        // field (e.g. deletedAt) must be published this way — otherwise every
+        // export fails with "Invalid Arguments / Cannot create or modify field
+        // '…' in production schema" and all sync silently halts.
+        if !inMemory, ProcessInfo.processInfo.environment["INIT_CK_SCHEMA"] == "1" {
+            do {
+                try container.initializeCloudKitSchema(options: [])
+                NSLog("%@", "StickySync[CK] initializeCloudKitSchema SUCCEEDED — now deploy Development → Production in the CloudKit Console")
+            } catch {
+                NSLog("%@", "StickySync[CK] initializeCloudKitSchema FAILED: \(error as NSError)")
+            }
+        }
+        #endif
+
         context.automaticallyMergesChangesFromParent = true
         context.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
 
