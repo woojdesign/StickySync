@@ -17,7 +17,14 @@ let package = Package(
         // The app itself lives in the Xcode project (StickySync/) and links
         // this NotesKit library product.
         .target(
-            name: "NotesKit"
+            name: "NotesKit",
+            // CloudKit.framework must be explicitly linked, or a sandboxed app
+            // can't reach the CloudKit daemon (cloudd) — the "error 159 sandbox
+            // restriction" failure. NSPersistentCloudKitContainer lives in
+            // CoreData, so CloudKit isn't pulled in automatically.
+            linkerSettings: [
+                .linkedFramework("CloudKit")
+            ]
         ),
         .testTarget(
             name: "NotesKitTests",

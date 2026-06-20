@@ -1,5 +1,9 @@
 import Foundation
 import CoreData
+// NSPersistentCloudKitContainer is in CoreData, but CloudKit.framework must
+// still be linked for a sandboxed app to reach the CloudKit daemon. Importing
+// it here ensures the framework is linked into anything that uses this store.
+import CloudKit
 
 /// Core Data managed object backing a synced note. All attributes are optional
 /// or have defaults (a CloudKit requirement) and there are no unique
