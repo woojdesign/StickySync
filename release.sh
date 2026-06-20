@@ -44,15 +44,40 @@ echo "==> Signing update + generating appcast"
 "$GEN_APPCAST" "$RELEASES" --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/"
 [ -f "$RELEASES/appcast.xml" ] || { echo "error: appcast.xml not generated"; exit 1; }
 
+# Stable-named copy so .../releases/latest/download/StickySync.zip is a
+# permanent download link to share. Made AFTER generate_appcast so it isn't
+# picked up as a second appcast entry.
+cp "$RELEASES/$(basename "$ZIP")" "$RELEASES/StickySync.zip"
+
+# Friend-facing install guide, used as the GitHub release notes.
+cat > "$RELEASES/NOTES.md" <<EOF
+## Install StickySync $VERSION
+
+Requires macOS 15.6 or later.
+
+1. **Download:** [StickySync.zip](https://github.com/$REPO/releases/latest/download/StickySync.zip) — always the newest version.
+2. **Unzip** (double-click) and drag **StickySync** into your **Applications** folder.
+3. **First launch.** macOS is cautious about apps from outside the App Store, so the first open takes a couple of extra clicks:
+   - Double-click StickySync. You'll see *"Apple could not verify…"* — click **Done** (not Move to Trash).
+   - Open **System Settings → Privacy & Security**, scroll to **Security**, and next to *"StickySync was blocked…"* click **Open Anyway**, then confirm with your password or Touch ID.
+   - The app is notarized by Apple — this is just macOS's standard caution for non-App-Store apps, and you only do it once.
+4. Done! StickySync lives in your **menu bar**. ⌘N = new note, ⌘L = all notes, ✕ hides a note (reopen it from the menu-bar list).
+
+**Updates** install themselves automatically — no need to come back here.
+**Sync** (optional): while signed into iCloud, your notes sync across your own Macs.
+EOF
+
 # 3. Publish the GitHub Release. SUFeedURL is .../releases/latest/download/
-#    appcast.xml, so the newest release's appcast is always the live feed.
+#    appcast.xml, so the newest release's appcast is always the live feed;
+#    StickySync.zip is the stable friend-facing download.
 echo "==> Publishing GitHub release $TAG"
 gh release create "$TAG" \
     "$RELEASES/$(basename "$ZIP")" \
+    "$RELEASES/StickySync.zip" \
     "$RELEASES/appcast.xml" \
     --repo "$REPO" \
     --title "StickySync $VERSION" \
-    --notes "StickySync $VERSION"
+    --notes-file "$RELEASES/NOTES.md"
 
 echo
 echo "Released $TAG."
