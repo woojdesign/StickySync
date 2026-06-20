@@ -181,7 +181,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
         appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "About StickySync", action: nil, keyEquivalent: "")
+        appMenu.addItem(withTitle: "About StickySync",
+                        action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+                        keyEquivalent: "")
         #if canImport(Sparkle)
         appMenu.addItem(.separator())
         let updatesItem = NSMenuItem(title: "Check for Updates…",
