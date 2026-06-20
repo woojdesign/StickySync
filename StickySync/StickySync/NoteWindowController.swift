@@ -82,6 +82,33 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.orderOut(nil)
     }
 
+    // MARK: - Sync
+
+    /// Apply an incoming (synced) version of this note to the open window.
+    /// Appearance and collapse always update; the text only updates when the
+    /// user isn't actively editing here, so a remote change never yanks the
+    /// cursor out from under them.
+    func refresh(from updated: Note) {
+        let appearanceChanged = updated.colorToken != note.colorToken
+            || updated.fontName != note.fontName
+            || updated.fontSize != note.fontSize
+        let contentChanged = updated.content != note.content
+        let isEditing = window.firstResponder === noteView.textView
+
+        note = updated
+
+        if appearanceChanged { applyAppearance() }
+        setCollapsed(updated.collapsed, persist: false, animated: true)
+
+        if contentChanged && !isEditing {
+            let selection = noteView.textView.selectedRange
+            noteView.textView.string = updated.content
+            applyAppearance()
+            let length = (updated.content as NSString).length
+            noteView.textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
+        }
+    }
+
     // MARK: - Appearance
 
     private func applyAppearance() {
@@ -156,11 +183,24 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     // MARK: - Collapse
 
     private func toggleCollapse() {
-        note.collapsed.toggle()
+        setCollapsed(!note.collapsed, persist: true, animated: true)
+    }
+
+    /// Applies a target collapsed state to the window. `persist` writes it back
+    /// to the store — pass false when the change *came* from the store (sync).
+    private func setCollapsed(_ collapsed: Bool, persist: Bool, animated: Bool) {
+        // Already in the requested visual state: just keep the model in step.
+        if collapsed == noteView.scrollView.isHidden {
+            note.collapsed = collapsed
+            if persist { saveNow() }
+            return
+        }
+
+        note.collapsed = collapsed
         var frame = window.frame
         let collapsedHeight = noteView.headerHeight
 
-        if note.collapsed {
+        if collapsed {
             expandedHeight = frame.height
             frame.origin.y += frame.height - collapsedHeight
             frame.size.height = collapsedHeight
@@ -170,10 +210,12 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             frame.size.height = target
         }
 
-        noteView.scrollView.isHidden = note.collapsed
-        window.setFrame(frame, display: true, animate: true)
-        saveNow()
-        persistLayout()
+        noteView.scrollView.isHidden = collapsed
+        window.setFrame(frame, display: true, animate: animated)
+        if persist {
+            saveNow()
+            persistLayout()
+        }
     }
 
     // MARK: - Delete

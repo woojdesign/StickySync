@@ -15,11 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controllers: [UUID: NoteWindowController] = [:]
 
     #if canImport(Sparkle)
-    // In-app auto-updates. Activates once the Sparkle package is added to the
-    // target; the whole block compiles out when it isn't, so the app builds
-    // either way.
+    // In-app auto-updates. startingUpdater is false for now so the updater
+    // stays dormant (no "enable automatic checks?" prompt, no errors about a
+    // missing feed) until we wire up the appcast. Flip to true then.
     private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -73,10 +73,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let current = store.allNotes()
         let currentIDs = Set(current.map { $0.id })
 
-        for note in current where controllers[note.id] == nil {
-            openWindow(for: note, focus: false)
+        for note in current {
+            if let controller = controllers[note.id] {
+                controller.refresh(from: note)   // live-update an already-open note
+            } else {
+                openWindow(for: note, focus: false)
+            }
         }
-        for id in controllers.keys where !currentIDs.contains(id) {
+
+        let staleIDs = controllers.keys.filter { !currentIDs.contains($0) }
+        for id in staleIDs {
             controllers[id]?.close()
             controllers[id] = nil
         }
