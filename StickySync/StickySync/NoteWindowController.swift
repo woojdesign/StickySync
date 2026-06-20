@@ -93,7 +93,12 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             || updated.fontName != note.fontName
             || updated.fontSize != note.fontSize
         let contentChanged = updated.content != note.content
-        let isEditing = window.firstResponder === noteView.textView
+        // Only hold back the text update for the note the user is *actively*
+        // editing — i.e. its window is key and the editor is focused. A
+        // background note keeps its text view as first responder even when it
+        // isn't key, so without the isKeyWindow check, any note you'd ever
+        // clicked into would stop accepting synced edits.
+        let isEditing = window.isKeyWindow && window.firstResponder === noteView.textView
 
         note = updated
 
