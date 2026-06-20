@@ -1,5 +1,8 @@
 import AppKit
 import NotesKit
+#if canImport(Sparkle)
+import Sparkle
+#endif
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // The Xcode app target defines CLOUDKIT (Active Compilation Conditions) so
@@ -10,6 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let store: NoteStore = JSONNoteStore()
     #endif
     private var controllers: [UUID: NoteWindowController] = [:]
+
+    #if canImport(Sparkle)
+    // In-app auto-updates. Activates once the Sparkle package is added to the
+    // target; the whole block compiles out when it isn't, so the app builds
+    // either way.
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -94,6 +105,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appItem.submenu = appMenu
         appMenu.addItem(withTitle: "About StickySync", action: nil, keyEquivalent: "")
+        #if canImport(Sparkle)
+        let updatesItem = NSMenuItem(title: "Check for Updates…",
+                                     action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                                     keyEquivalent: "")
+        updatesItem.target = updaterController
+        appMenu.addItem(.separator())
+        appMenu.addItem(updatesItem)
+        #endif
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit StickySync",
                         action: #selector(NSApplication.terminate(_:)),
