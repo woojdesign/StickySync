@@ -10,7 +10,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     let window: NoteWindow
     private let noteView: NoteContentView
 
-    var onRequestDelete: ((UUID) -> Void)?
+    var onRequestClose: ((UUID) -> Void)?
 
     private var expandedHeight: CGFloat
     private var saveWorkItem: DispatchWorkItem?
@@ -22,8 +22,11 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
         let layout = store.layout(for: note.id)
         let frame: NSRect
-        if let l = layout {
+        // Real saved geometry → restore it. Otherwise (a new note, or a
+        // hidden-state sentinel with zero size) → cascade a fresh frame.
+        if let l = layout, l.width > 0, l.height > 0 {
             frame = NSRect(x: l.x, y: l.y, width: l.width, height: l.height)
+            self.expandedHeight = CGFloat(l.expandedHeight ?? l.height)
         } else {
             let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
             let i = NoteWindowController.cascadeIndex
@@ -32,8 +35,8 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             frame = NSRect(x: screen.minX + 90 + step,
                            y: screen.maxY - 200 - step,
                            width: 240, height: 180)
+            self.expandedHeight = frame.height
         }
-        self.expandedHeight = CGFloat(layout?.expandedHeight ?? Double(frame.height))
 
         window = NoteWindow(contentRect: frame,
                             styleMask: [.borderless, .resizable],
@@ -59,7 +62,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
         noteView.onColor = { [weak self] in self?.showColorPopover() }
         noteView.onFont = { [weak self] in self?.showFontPopover() }
-        noteView.onClose = { [weak self] in self?.requestDelete() }
+        noteView.onClose = { [weak self] in self?.requestClose() }
         noteView.onToggleCollapse = { [weak self] in self?.toggleCollapse() }
         noteView.onHoverChange = { [weak self] hovering in
             self?.noteView.setChromeVisible(hovering, animated: true)
@@ -223,10 +226,10 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         }
     }
 
-    // MARK: - Delete
+    // MARK: - Close
 
-    private func requestDelete() {
-        onRequestDelete?(note.id)
+    private func requestClose() {
+        onRequestClose?(note.id)
     }
 
     // MARK: - Layout persistence

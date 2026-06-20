@@ -66,7 +66,7 @@ final class NoteContentView: NSView {
         fontButton.toolTip = "Change font"
         header.addSubview(fontButton)
 
-        configureIconButton(closeButton, symbol: "xmark", tip: "Delete note", action: #selector(closeTapped))
+        configureIconButton(closeButton, symbol: "xmark", tip: "Close note", action: #selector(closeTapped))
         header.addSubview(closeButton)
 
         scrollView.drawsBackground = false

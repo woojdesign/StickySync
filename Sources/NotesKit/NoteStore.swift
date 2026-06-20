@@ -27,3 +27,24 @@ public protocol NoteStore: AnyObject {
     /// Fired when notes change from outside the app (e.g. an incoming sync).
     var onChange: (() -> Void)? { get set }
 }
+
+public extension NoteStore {
+    /// Show/hide a note on THIS device (device-local; never synced) — used by
+    /// "close" (hide) and reopening from the notes list. Distinct from
+    /// `softDelete`, which tombstones the note and removes it everywhere.
+    func setHidden(_ hidden: Bool, for id: UUID) {
+        if var layout = layout(for: id) {
+            layout.hidden = hidden
+            setLayout(layout)
+        } else {
+            // No geometry yet: a zero-size sentinel; the window controller
+            // cascades a fresh frame when it sees width/height == 0.
+            setLayout(NoteLayout(noteID: id, x: 0, y: 0, width: 0, height: 0, hidden: hidden))
+        }
+    }
+
+    /// Whether the note is currently closed (hidden) on this device.
+    func isHidden(_ id: UUID) -> Bool {
+        layout(for: id)?.hidden ?? false
+    }
+}

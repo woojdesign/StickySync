@@ -12,35 +12,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #else
     let store: NoteStore = JSONNoteStore()
     #endif
+
     private var controllers: [UUID: NoteWindowController] = [:]
+    private var statusItemController: StatusItemController?
+    private var listWindowController: NotesListWindowController?
 
     #if canImport(Sparkle)
-    // In-app auto-updates. startingUpdater is false for now so the updater
-    // stays dormant (no "enable automatic checks?" prompt, no errors about a
-    // missing feed) until we wire up the appcast. Flip to true then.
+    // In-app auto-updates, dormant (startingUpdater:false) until the appcast is
+    // wired up. Flip to true then.
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+        setupStatusItem()
 
         let notes = store.allNotes()
         if notes.isEmpty {
             let welcome = Note(
-                content: "Welcome to StickySync.\n\nDrag me by the title bar. Hover to reveal the color and font controls. Double-click the title bar to roll me up. Press ⌘N for a new note.",
+                content: "Welcome to StickySync.\n\nDrag me by the title bar. Hover for the color and font controls. Close (✕) just hides a note — reopen it from the menu-bar list or All Notes (⌘L).",
                 colorToken: "butter"
             )
             store.add(welcome)
             openWindow(for: welcome, focus: false)
         } else {
-            for note in notes {
+            for note in notes where !store.isHidden(note.id) {
                 openWindow(for: note, focus: false)
             }
         }
 
-        // Refresh windows when the store changes from outside (incoming sync,
-        // once the CloudKit store is wired up).
+        // Refresh windows + lists when the store changes from outside (sync).
         store.onChange = { [weak self] in
             DispatchQueue.main.async { self?.reconcileWindows() }
         }
@@ -52,31 +54,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    // MARK: - Window management
+    // MARK: - Note lifecycle
 
     private func openWindow(for note: Note, focus: Bool) {
         let controller = NoteWindowController(note: note, store: store)
-        controller.onRequestDelete = { [weak self] id in self?.deleteNote(id) }
+        controller.onRequestClose = { [weak self] id in self?.hideNote(id) }
         controllers[note.id] = controller
         controller.show(focus: focus)
     }
 
+    /// Close = hide on THIS device (device-local). The note still exists and
+    /// keeps syncing; reopen it from a list.
+    private func hideNote(_ id: UUID) {
+        store.setHidden(true, for: id)
+        controllers[id]?.close()
+        controllers[id] = nil
+        refreshLists()
+    }
+
+    /// Reopen a closed note (or focus it if already open).
+    private func showNote(_ id: UUID) {
+        store.setHidden(false, for: id)
+        if let controller = controllers[id] {
+            controller.show(focus: true)
+        } else if let note = store.note(id: id) {
+            openWindow(for: note, focus: true)
+        }
+        refreshLists()
+    }
+
+    /// Delete = tombstone, removed on every device. The explicit, synced action.
     private func deleteNote(_ id: UUID) {
         store.softDelete(id: id)
         controllers[id]?.close()
         controllers[id] = nil
+        refreshLists()
     }
 
-    /// Opens windows for notes that appeared and closes windows for notes that
-    /// vanished — the hook a sync layer will lean on.
+    /// Opens windows for newly-appeared (non-hidden) notes, live-updates open
+    /// ones, and closes windows for notes deleted elsewhere.
     private func reconcileWindows() {
         let current = store.allNotes()
         let currentIDs = Set(current.map { $0.id })
 
         for note in current {
             if let controller = controllers[note.id] {
-                controller.refresh(from: note)   // live-update an already-open note
-            } else {
+                controller.refresh(from: note)
+            } else if !store.isHidden(note.id) {
                 openWindow(for: note, focus: false)
             }
         }
@@ -86,19 +110,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controllers[id]?.close()
             controllers[id] = nil
         }
+
+        refreshLists()
     }
 
     @objc func newNote() {
         let note = Note()
         store.add(note)
         openWindow(for: note, focus: true)
+        refreshLists()
     }
 
     @objc func closeKeyNote() {
-        guard let keyWindow = NSApp.keyWindow,
-              let entry = controllers.first(where: { $0.value.window === keyWindow })
-        else { return }
-        deleteNote(entry.key)
+        if let id = keyNoteID() { hideNote(id) }
+    }
+
+    @objc func deleteKeyNote() {
+        guard let id = keyNoteID(), let note = store.note(id: id) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Delete this note?"
+        alert.informativeText = "“\(NotePreview.title(for: note))” will be removed from all your devices. This can’t be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn { deleteNote(id) }
+    }
+
+    private func keyNoteID() -> UUID? {
+        guard let keyWindow = NSApp.keyWindow else { return nil }
+        return controllers.first(where: { $0.value.window === keyWindow })?.key
+    }
+
+    // MARK: - Lists
+
+    private func setupStatusItem() {
+        let controller = StatusItemController(store: store)
+        controller.onNewNote = { [weak self] in self?.newNote() }
+        controller.onShowNote = { [weak self] id in self?.showNote(id) }
+        controller.onShowList = { [weak self] in self?.showList() }
+        controller.isNoteOpen = { [weak self] id in self?.controllers[id] != nil }
+        statusItemController = controller
+    }
+
+    @objc func showList() {
+        if listWindowController == nil {
+            let controller = NotesListWindowController(store: store)
+            controller.onShowNote = { [weak self] id in self?.showNote(id) }
+            controller.onDeleteNote = { [weak self] id in self?.deleteNote(id) }
+            controller.onNewNote = { [weak self] in self?.newNote() }
+            controller.isNoteOpen = { [weak self] id in self?.controllers[id] != nil }
+            listWindowController = controller
+        }
+        listWindowController?.show()
+    }
+
+    private func refreshLists() {
+        listWindowController?.reload()
+        // The status-bar menu rebuilds itself each time it opens, so it needs
+        // no explicit refresh here.
     }
 
     // MARK: - Menu
@@ -112,28 +181,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appItem.submenu = appMenu
         appMenu.addItem(withTitle: "About StickySync", action: nil, keyEquivalent: "")
         #if canImport(Sparkle)
+        appMenu.addItem(.separator())
         let updatesItem = NSMenuItem(title: "Check for Updates…",
                                      action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
                                      keyEquivalent: "")
         updatesItem.target = updaterController
-        appMenu.addItem(.separator())
         appMenu.addItem(updatesItem)
         #endif
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit StickySync",
-                        action: #selector(NSApplication.terminate(_:)),
-                        keyEquivalent: "q")
+                        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         let fileItem = NSMenuItem()
         mainMenu.addItem(fileItem)
         let fileMenu = NSMenu(title: "File")
         fileItem.submenu = fileMenu
-        let newItem = NSMenuItem(title: "New Note", action: #selector(newNote), keyEquivalent: "n")
-        newItem.target = self
-        fileMenu.addItem(newItem)
-        let closeItem = NSMenuItem(title: "Close Note", action: #selector(closeKeyNote), keyEquivalent: "w")
-        closeItem.target = self
-        fileMenu.addItem(closeItem)
+        addItem(to: fileMenu, "New Note", #selector(newNote), "n")
+        addItem(to: fileMenu, "All Notes…", #selector(showList), "l")
+        fileMenu.addItem(.separator())
+        addItem(to: fileMenu, "Close Note", #selector(closeKeyNote), "w")
+        addItem(to: fileMenu, "Delete Note…", #selector(deleteKeyNote), "")
 
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
@@ -149,5 +216,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private func addItem(to menu: NSMenu, _ title: String, _ action: Selector, _ key: String) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        menu.addItem(item)
     }
 }
