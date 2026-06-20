@@ -67,6 +67,32 @@ public final class CloudKitNoteStore: NoteStore {
             }
         }
 
+        // Diagnostic: CloudKit setup/import/export errors are redacted as
+        // <private> in the system log, so log them ourselves (unredacted, via
+        // the app's own NSError) to pin down why mirroring fails to initialize.
+        if !inMemory {
+            NotificationCenter.default.addObserver(
+                forName: NSPersistentCloudKitContainer.eventChangedNotification,
+                object: container, queue: .main
+            ) { notification in
+                guard let event = notification.userInfo?[
+                    NSPersistentCloudKitContainer.eventNotificationUserInfoKey
+                ] as? NSPersistentCloudKitContainer.Event else { return }
+                let kind: String
+                switch event.type {
+                case .setup: kind = "setup"
+                case .import: kind = "import"
+                case .export: kind = "export"
+                @unknown default: kind = "other"
+                }
+                if let error = event.error {
+                    NSLog("%@", "StickySync[CK] \(kind) FAILED: \(error as NSError)")
+                } else if event.endDate != nil {
+                    NSLog("%@", "StickySync[CK] \(kind) ok")
+                }
+            }
+        }
+
         container.loadPersistentStores { _, error in
             if let error = error {
                 NSLog("StickySync: Core Data store failed to load: \(error)")
