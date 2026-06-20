@@ -18,10 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var listWindowController: NotesListWindowController?
 
     #if canImport(Sparkle)
-    // In-app auto-updates, dormant (startingUpdater:false) until the appcast is
-    // wired up. Flip to true then.
+    // In-app auto-updates. Start the updater only when a feed is configured —
+    // shipping builds carry SUFeedURL via the merged Info.plist; dev (Debug)
+    // builds don't, so it stays quiet there instead of erroring on a missing feed.
     private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+        startingUpdater: Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil,
+        updaterDelegate: nil, userDriverDelegate: nil)
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {

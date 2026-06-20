@@ -51,6 +51,8 @@ xcodebuild archive \
     -destination "generic/platform=macOS" \
     -archivePath "$ARCHIVE" \
     -allowProvisioningUpdates \
+    ENABLE_APP_SANDBOX=NO \
+    INFOPLIST_FILE=Info.plist \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     ${VERSION:+MARKETING_VERSION="$VERSION"}
 
