@@ -6,7 +6,7 @@
 	<string>https://github.com/woojdesign/StickySync/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>JkYg/JJTp7adKCjdq0EskEAOMwxsd2vJVvRou9hkZ/I=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<!-- SUEnableAutomaticChecks deliberately omitted: Sparkle then asks the user
+	     on first launch whether to enable automatic update checks. -->
 </dict>
 </plist>
