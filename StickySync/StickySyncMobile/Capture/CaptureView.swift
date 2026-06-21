@@ -19,7 +19,8 @@ struct CaptureView: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            if vm.phase == .listening || vm.phase == .denied {
+            // Only the denied state needs a close here — ListeningView has its own.
+            if vm.phase == .denied {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .semibold))
