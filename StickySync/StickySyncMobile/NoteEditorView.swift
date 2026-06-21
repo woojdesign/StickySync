@@ -1,134 +1,128 @@
 import SwiftUI
 import NotesKit
 
-/// Full-screen editor for one note: a colored text area with color, format, and
-/// delete controls. Edits autosave (debounced) to the shared store, so they
-/// sync out the same way the Mac app's do.
+/// Full-screen note editor in the wooj note-detail style + Capture's sticky
+/// language: the note's color fills the screen, a Charter `reading` body, a
+/// ‹ Notes back + ⋯ menu, and a floating bottom palette dock (color swatches +
+/// Aa). Opens with a settle spring; autosaves (debounced).
 struct NoteEditorView: View {
     @EnvironmentObject private var model: NotesModel
     @Environment(\.dismiss) private var dismiss
     @State private var note: Note
     @State private var saveTask: Task<Void, Never>?
-    @State private var showFormat = false
-    @State private var confirmDelete = false
-    @FocusState private var editing: Bool
+    @State private var landed = false
+    @FocusState private var focused: Bool
 
     init(note: Note) {
         _note = State(initialValue: note)
     }
 
     var body: some View {
-        NavigationStack {
-            TextEditor(text: $note.content)
-                .font(Appearance.font(note.fontName, size: CGFloat(note.fontSize)))
-                .foregroundStyle(Appearance.text(note.colorToken))
-                .scrollContentBackground(.hidden)
-                .focused($editing)
-                .scrollDismissesKeyboard(.interactively)
-                .padding(.horizontal, 14)
-                .padding(.top, 8)
-                .background(Appearance.background(note.colorToken).ignoresSafeArea())
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(Appearance.background(note.colorToken), for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
-                .onChange(of: note.content) { scheduleSave() }
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Done") { saveNow(); dismiss() }
-                    }
-                    ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        colorMenu
-                        Button { showFormat = true } label: {
-                            Image(systemName: "textformat.size")
-                        }
-                        .accessibilityLabel("Text format")
-                        Button(role: .destructive) { confirmDelete = true } label: {
-                            Image(systemName: "trash")
-                        }
-                        .accessibilityLabel("Delete note")
-                    }
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") { editing = false }
-                    }
-                }
-        }
-        .presentationDragIndicator(.visible)
-        .sheet(isPresented: $showFormat) { formatSheet }
-        .confirmationDialog("Delete this note?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                saveTask?.cancel()
-                model.delete(note)
-                dismiss()
+        ZStack {
+            Appearance.background(note.colorToken).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topBar
+                TextEditor(text: $note.content)
+                    .font(Appearance.font(note.fontName, size: CGFloat(note.fontSize)))
+                    .foregroundStyle(WoojColor.reading)
+                    .lineSpacing(7)
+                    .tint(WoojColor.clay)
+                    .scrollContentBackground(.hidden)
+                    .focused($focused)
+                    .padding(.horizontal, WoojSpace.lg)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes it from all your devices.")
+        }
+        .safeAreaInset(edge: .bottom) { paletteDock }
+        .scaleEffect(landed ? 1 : 0.98)
+        .opacity(landed ? 1 : 0)
+        .onAppear { withAnimation(WoojMotion.settle) { landed = true } }
+        .onChange(of: note.content) { _ in scheduleSave() }
+        .onDisappear { saveNow() }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focused = false }
+            }
         }
     }
 
-    private var colorMenu: some View {
+    private var topBar: some View {
+        HStack {
+            Button { saveNow(); dismiss() } label: {
+                HStack(spacing: 1) {
+                    Image(systemName: "chevron.left").font(.system(size: 16, weight: .medium))
+                    Text("Notes").font(.system(size: 17))
+                }
+                .foregroundStyle(WoojColor.clay)
+            }
+            Spacer()
+            Menu {
+                Button(role: .destructive) {
+                    model.delete(note); dismiss()
+                } label: { Label("Delete", systemImage: "trash") }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(WoojColor.clay)
+            }
+        }
+        .padding(.horizontal, WoojSpace.md)
+        .padding(.top, WoojSpace.sm)
+        .padding(.bottom, WoojSpace.xs)
+    }
+
+    private var paletteDock: some View {
+        HStack(spacing: WoojSpace.sm) {
+            ForEach(Palette.colors, id: \.token) { c in
+                Circle()
+                    .fill(Appearance.background(c.token))
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Circle().strokeBorder(
+                            note.colorToken == c.token ? WoojColor.clay : WoojColor.line,
+                            lineWidth: note.colorToken == c.token ? 2 : 1)
+                    )
+                    .onTapGesture {
+                        note.colorToken = c.token
+                        saveNow()
+                    }
+            }
+            Spacer(minLength: WoojSpace.xs)
+            fontMenu
+        }
+        .padding(.horizontal, WoojSpace.md)
+        .padding(.vertical, WoojSpace.sm)
+        .background(WoojColor.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(WoojColor.line))
+        .shadow(color: WoojColor.ink.opacity(0.10), radius: 12, y: 4)
+        .padding(.horizontal, WoojSpace.md)
+        .padding(.bottom, WoojSpace.xs)
+    }
+
+    private var fontMenu: some View {
         Menu {
-            ForEach(Palette.colors, id: \.token) { color in
+            ForEach(FontCatalog.options, id: \.id) { o in
                 Button {
-                    note.colorToken = color.token
-                    saveNow()
+                    note.fontName = o.id; saveNow()
                 } label: {
-                    Label(color.displayName,
-                          systemImage: note.colorToken == color.token ? "checkmark" : "circle")
+                    Label(o.displayName, systemImage: note.fontName == o.id ? "checkmark" : "")
                 }
             }
+            Divider()
+            Button { setSize(-1) } label: { Label("Smaller", systemImage: "textformat.size.smaller") }
+            Button { setSize(1) } label: { Label("Larger", systemImage: "textformat.size.larger") }
         } label: {
-            Image(systemName: "paintpalette")
+            Text("Aa")
+                .font(.custom(WoojType.reading.family, size: 19))
+                .foregroundStyle(WoojColor.ink)
         }
-        .accessibilityLabel("Change color")
     }
 
-    private var formatSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Font") {
-                    Picker("Typeface", selection: fontBinding) {
-                        ForEach(FontCatalog.options, id: \.id) { option in
-                            Text(option.displayName).tag(option.id)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                }
-                Section("Size") {
-                    HStack(spacing: 12) {
-                        Image(systemName: "textformat.size.smaller").foregroundStyle(.secondary)
-                        Slider(value: sizeBinding, in: FontCatalog.minSize...FontCatalog.maxSize, step: 1)
-                        Image(systemName: "textformat.size.larger").foregroundStyle(.secondary)
-                    }
-                    Text("The quick brown fox")
-                        .font(Appearance.font(note.fontName, size: CGFloat(note.fontSize)))
-                        .foregroundStyle(Appearance.text(note.colorToken))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(Appearance.background(note.colorToken),
-                                    in: RoundedRectangle(cornerRadius: 10))
-                }
-            }
-            .navigationTitle("Format")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showFormat = false }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    private var fontBinding: Binding<String> {
-        Binding(get: { note.fontName }, set: { note.fontName = $0; saveNow() })
-    }
-
-    private var sizeBinding: Binding<Double> {
-        // Debounced — the slider fires continuously while dragging.
-        Binding(get: { note.fontSize }, set: { note.fontSize = FontCatalog.clampSize($0); scheduleSave() })
+    private func setSize(_ delta: Double) {
+        note.fontSize = FontCatalog.clampSize(note.fontSize + delta)
+        saveNow()
     }
 
     private func scheduleSave() {

@@ -18,7 +18,7 @@ enum Appearance {
         switch FontCatalog.option(for: id).kind {
         case .system:          return .system(size: size)
         case .rounded:         return .system(size: size, design: .rounded)
-        case .serif:           return .system(size: size, design: .serif)
+        case .serif:           return .custom(WoojType.reading.family, size: size)  // Charter (wooj reading)
         case .monospaced:      return .system(size: size, design: .monospaced)
         case .named(let name): return .custom(name, size: size)
         }

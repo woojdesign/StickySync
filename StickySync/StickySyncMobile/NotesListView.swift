@@ -53,7 +53,7 @@ struct NotesListView: View {
             .safeAreaInset(edge: .bottom) { captureBar }
         }
         .tint(WoojColor.clay)
-        .sheet(item: $editing) { note in
+        .fullScreenCover(item: $editing) { note in
             NoteEditorView(note: note)
                 .environmentObject(model)
         }

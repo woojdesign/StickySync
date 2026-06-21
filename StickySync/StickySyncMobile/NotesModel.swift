@@ -26,7 +26,8 @@ final class NotesModel: ObservableObject {
 
     @discardableResult
     func newNote() -> Note {
-        let note = Note()
+        var note = Note()
+        note.fontName = "serif"   // wooj reading (Charter) by default for new notes
         store.add(note)
         reload()
         return note
