@@ -4,7 +4,8 @@ import WoojTokens
 /// The whole app: one screen that swaps between calm states. Opens straight
 /// into listening (cold launch via `onAppear`; warm trigger via notification).
 struct CaptureView: View {
-    @StateObject private var vm = CaptureViewModel()
+    @ObservedObject var vm: CaptureViewModel
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -17,8 +18,26 @@ struct CaptureView: View {
             case .denied:    DeniedView(openSettings: vm.openSettings)
             }
         }
+        .overlay(alignment: .topLeading) {
+            if vm.phase == .listening || vm.phase == .denied {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(WoojColor.muted)
+                        .frame(width: 40, height: 40)
+                        .background(WoojColor.surface, in: Circle())
+                }
+                .padding(WoojSpace.md)
+                .accessibilityLabel("Close")
+            }
+        }
         .animation(WoojMotion.calm.animation, value: vm.phase)
         .onAppear { vm.startIfNeeded() }
+        .onChange(of: vm.phase) { newPhase in
+            // After a save (saved → idle) or a cancel, close the sheet.
+            if newPhase == .idle { dismiss() }
+        }
+        .onDisappear { vm.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: .startCapture)) { _ in
             vm.startIfNeeded()
         }

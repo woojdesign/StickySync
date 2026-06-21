@@ -10,6 +10,10 @@ final class NotesModel: ObservableObject {
     @Published private(set) var notes: [Note] = []
     private let store: NoteStore
 
+    /// The one shared store, exposed so the capture surface writes through the
+    /// same container (a second NoteStore would mean two CloudKit containers).
+    var sharedStore: NoteStore { store }
+
     init(store: NoteStore) {
         self.store = store
         reload()

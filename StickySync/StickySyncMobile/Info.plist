@@ -5,6 +5,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>audio</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>StickySync uses the microphone to capture a note from your voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>StickySync transcribes your voice on-device to turn it into a note.</string>
 </dict>
 </plist>

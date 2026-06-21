@@ -10,6 +10,7 @@ struct NotesListView: View {
     @EnvironmentObject private var model: NotesModel
     @State private var editing: Note?
     @State private var search = ""
+    @State private var capturing = false
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
 
@@ -58,6 +59,9 @@ struct NotesListView: View {
             NoteEditorView(note: note)
                 .environmentObject(model)
         }
+        .fullScreenCover(isPresented: $capturing) {
+            CaptureSheet(store: model.sharedStore)
+        }
     }
 
     private var header: some View {
@@ -89,21 +93,33 @@ struct NotesListView: View {
     }
 
     private var captureBar: some View {
-        Button {
-            editing = model.newNote()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                Text("New note")
-                Spacer()
+        HStack(spacing: 10) {
+            Button {
+                editing = model.newNote()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                    Text("New note")
+                    Spacer()
+                }
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(WoojColor.ink)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .background(WoojColor.surface)
+                .clipShape(Capsule())
+                .overlay(Capsule().strokeBorder(WoojColor.line))
             }
-            .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(WoojColor.ink)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(WoojColor.surface)
-            .clipShape(Capsule())
-            .overlay(Capsule().strokeBorder(WoojColor.line))
+            Button {
+                capturing = true
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(WoojColor.onClay)
+                    .frame(width: 52, height: 52)
+                    .background(WoojColor.clay, in: Circle())
+            }
+            .accessibilityLabel("Capture by voice")
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
@@ -174,4 +190,15 @@ private struct NoteCard: View {
         }
         f.dateFormat = "MMM d"; return f.string(from: date)
     }
+}
+
+/// Hosts the voice-capture surface for one presentation. Owns the VM via
+/// @StateObject (so re-renders don't restart the take) and routes its writes
+/// through the app's shared store, so captured notes appear in the list.
+private struct CaptureSheet: View {
+    @StateObject private var vm: CaptureViewModel
+    init(store: NoteStore) {
+        _vm = StateObject(wrappedValue: CaptureViewModel(store: store))
+    }
+    var body: some View { CaptureView(vm: vm) }
 }

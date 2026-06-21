@@ -22,7 +22,7 @@ final class CaptureViewModel: ObservableObject {
 
     private let recorder = AudioRecorder()
     private let speech = SpeechTranscriber()
-    private let writer = NoteWriter()
+    private let writer: NoteWriter
     // High-fidelity final pass (WhisperKit base.en). Falls back to the SFSpeech
     // partial whenever it can't run, so capture never depends on it.
     private let finalizer: TranscriptionFinalizer = SpeechFinalizer()
@@ -40,7 +40,11 @@ final class CaptureViewModel: ObservableObject {
     private let tick: TimeInterval = 0.05
     private let savedDwell: TimeInterval = 1.8
 
-    init() {
+    init(store: NoteStore? = nil) {
+        // Write through the app's shared store when given one, so captured notes
+        // land in the list and we avoid a second CloudKit container; fall back to
+        // the standalone container otherwise.
+        writer = store.map { NoteWriter(store: $0) } ?? NoteWriter()
         speech.$partial.receive(on: RunLoop.main)
             .assign(to: \.partialText, on: self).store(in: &cancellables)
         recorder.$level.receive(on: RunLoop.main)
