@@ -62,6 +62,17 @@ struct NotesListView: View {
         .fullScreenCover(isPresented: $capturing) {
             CaptureSheet(store: model.sharedStore)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .startCapture)) { _ in
+            capturing = true
+        }
+        .onAppear {
+            // Cold launch via the Capture intent: the .startCapture post may have
+            // fired before this view was listening, so consume the flag too.
+            if CaptureLauncher.pending {
+                CaptureLauncher.pending = false
+                capturing = true
+            }
+        }
     }
 
     private var header: some View {
