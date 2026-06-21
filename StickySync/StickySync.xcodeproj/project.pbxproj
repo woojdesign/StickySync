@@ -170,7 +170,7 @@
 			mainGroup = A70052342FE5C55D0081736C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../StickySync" */,
+				A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */,
 				A70052602FE6DC700081736C /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -519,9 +519,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../StickySync" */ = {
+		A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../StickySync;
+			relativePath = ../../../dev/noteskit;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -548,7 +548,7 @@
 		};
 		A71D717A2FE833D7008D48F6 /* NotesKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../StickySync" */;
+			package = A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */;
 			productName = NotesKit;
 		};
 /* End XCSwiftPackageProductDependency section */
