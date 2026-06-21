@@ -1,5 +1,6 @@
 import SwiftUI
 import NotesKit
+import WoojTokens
 
 /// Full-screen note editor in the wooj note-detail style + Capture's sticky
 /// language: the note's color fills the screen, a Charter `reading` body, a
@@ -37,7 +38,7 @@ struct NoteEditorView: View {
         .safeAreaInset(edge: .bottom) { paletteDock }
         .scaleEffect(landed ? 1 : 0.98)
         .opacity(landed ? 1 : 0)
-        .onAppear { withAnimation(WoojMotion.settle) { landed = true } }
+        .onAppear { withAnimation(WoojMotion.settle.animation) { landed = true } }
         .onChange(of: note.content) { _ in scheduleSave() }
         .onDisappear { saveNow() }
         .toolbar {

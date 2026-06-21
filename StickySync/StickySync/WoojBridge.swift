@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import SwiftUI
+import WoojTokens
 
 // Bridges the SwiftUI-based wooj-tokens to the AppKit NSColor/NSFont that
 // StickySync draws with. No hex is re-typed here — every value comes from

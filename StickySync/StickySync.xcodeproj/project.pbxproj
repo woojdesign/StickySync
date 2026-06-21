@@ -10,6 +10,8 @@
 		A700525F2FE5D0680081736C /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A700525E2FE5D0680081736C /* NotesKit */; };
 		A70052622FE6DC700081736C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A70052612FE6DC700081736C /* Sparkle */; };
 		A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A71D717A2FE833D7008D48F6 /* NotesKit */; };
+		A78F031F2FE88FCF00485C17 /* WoojTokens in Frameworks */ = {isa = PBXBuildFile; productRef = A78F031E2FE88FCF00485C17 /* WoojTokens */; };
+		A78F03212FE88FDC00485C17 /* WoojTokens in Frameworks */ = {isa = PBXBuildFile; productRef = A78F03202FE88FDC00485C17 /* WoojTokens */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +51,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A700525F2FE5D0680081736C /* NotesKit in Frameworks */,
+				A78F031F2FE88FCF00485C17 /* WoojTokens in Frameworks */,
 				A70052622FE6DC700081736C /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -58,6 +61,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */,
+				A78F03212FE88FDC00485C17 /* WoojTokens in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +116,7 @@
 			packageProductDependencies = (
 				A700525E2FE5D0680081736C /* NotesKit */,
 				A70052612FE6DC700081736C /* Sparkle */,
+				A78F031E2FE88FCF00485C17 /* WoojTokens */,
 			);
 			productName = StickySync;
 			productReference = A700523D2FE5C55D0081736C /* StickySync.app */;
@@ -135,6 +140,7 @@
 			name = StickySyncMobile;
 			packageProductDependencies = (
 				A71D717A2FE833D7008D48F6 /* NotesKit */,
+				A78F03202FE88FDC00485C17 /* WoojTokens */,
 			);
 			productName = StickySyncMobile;
 			productReference = A71D71612FE83172008D48F6 /* StickySyncMobile.app */;
@@ -172,6 +178,7 @@
 			packageReferences = (
 				A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */,
 				A70052602FE6DC700081736C /* XCRemoteSwiftPackageReference "Sparkle" */,
+				A78F031D2FE88FCF00485C17 /* XCLocalSwiftPackageReference "../../../dev/wooj-tokens" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A700523E2FE5C55D0081736C /* Products */;
@@ -523,6 +530,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../../dev/noteskit;
 		};
+		A78F031D2FE88FCF00485C17 /* XCLocalSwiftPackageReference "../../../dev/wooj-tokens" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../../dev/wooj-tokens";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -550,6 +561,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */;
 			productName = NotesKit;
+		};
+		A78F031E2FE88FCF00485C17 /* WoojTokens */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WoojTokens;
+		};
+		A78F03202FE88FDC00485C17 /* WoojTokens */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WoojTokens;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

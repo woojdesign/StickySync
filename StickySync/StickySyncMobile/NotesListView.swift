@@ -1,5 +1,6 @@
 import SwiftUI
 import NotesKit
+import WoojTokens
 
 /// Root screen, styled to the wooj index mockup: a serif "Notes" header + count,
 /// a search field, and a grid of note cards (title + time footer) on the warm
