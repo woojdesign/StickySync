@@ -19,7 +19,9 @@ final class HeaderView: NSView {
 /// The rounded, colored body of a note: a title bar with hover-revealed
 /// controls (color, font, close) over a plain-text editor.
 final class NoteContentView: NSView {
-    let headerHeight: CGFloat = 30
+    /// Thin top strip holding the hover controls; it's also the drag handle.
+    /// Kept slim so text starts near the top of the note, like Stickies.
+    let headerHeight: CGFloat = 18
 
     private(set) var colorToken: String = Palette.defaultToken
 
@@ -78,7 +80,7 @@ final class NoteContentView: NSView {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.allowsUndo = true
-        textView.textContainerInset = NSSize(width: 12, height: 10)
+        textView.textContainerInset = NSSize(width: 12, height: 4)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -168,12 +170,12 @@ final class NoteContentView: NSView {
         let b = bounds
         header.frame = NSRect(x: 0, y: b.height - headerHeight, width: b.width, height: headerHeight)
 
-        let pad: CGFloat = 8
-        let size: CGFloat = 18
+        let pad: CGFloat = 7
+        let size: CGFloat = 16
         let cy = (headerHeight - size) / 2
         colorButton.frame = NSRect(x: pad, y: cy, width: size, height: size)
         closeButton.frame = NSRect(x: header.bounds.width - pad - size, y: cy, width: size, height: size)
-        fontButton.frame = NSRect(x: header.bounds.width - pad - size - 6 - 26, y: cy - 2, width: 26, height: size + 4)
+        fontButton.frame = NSRect(x: header.bounds.width - pad - size - 6 - 24, y: cy, width: 24, height: size)
 
         scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: max(0, b.height - headerHeight))
         textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)

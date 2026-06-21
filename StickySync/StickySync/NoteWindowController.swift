@@ -47,7 +47,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.level = .normal
-        window.minSize = NSSize(width: 170, height: 30)
+        window.minSize = NSSize(width: 170, height: 18)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
