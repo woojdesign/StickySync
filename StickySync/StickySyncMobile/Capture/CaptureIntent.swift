@@ -28,20 +28,52 @@ struct CaptureIntent: AppIntent {
     }
 }
 
-/// Registers the intent for the Action Button and "Hey Siri" without the user
-/// having to build a Shortcut by hand. Phrases resolve `applicationName` to
-/// "StickySync".
+/// Saves dictated text straight to a note: Siri captures the words and writes the
+/// note in the background — no recording screen. "Hey Siri, save the following to
+/// StickySync" → Siri asks what to save → it lands as a note.
+struct SaveNoteIntent: AppIntent {
+    static var title: LocalizedStringResource = "Save a Note"
+    static var description = IntentDescription("Save spoken text straight to a StickySync note, without opening the app.")
+
+    /// Background: never opens the app — the note is written and synced silently.
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "Note", requestValueDialog: "What's the note?")
+    var text: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .result(dialog: "There was nothing to save.") }
+        NoteWriter(store: NoteStoreProvider.shared).write(trimmed)
+        return .result(dialog: "Saved to StickySync.")
+    }
+}
+
+/// Registers both intents for the Action Button and "Hey Siri" without the user
+/// building a Shortcut by hand. The Action Button takes the record-screen
+/// `CaptureIntent`; Siri's "save the following" phrases take the text-only
+/// `SaveNoteIntent`. Phrases resolve `applicationName` to "StickySync".
 struct CaptureShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: CaptureIntent(),
             phrases: [
                 "Capture with \(.applicationName)",
-                "New \(.applicationName) note",
-                "Take a note with \(.applicationName)"
+                "Record a \(.applicationName) note"
             ],
             shortTitle: "Capture",
             systemImageName: "mic.fill"
+        )
+        AppShortcut(
+            intent: SaveNoteIntent(),
+            phrases: [
+                "Save a note to \(.applicationName)",
+                "New \(.applicationName) note",
+                "Save the following to \(.applicationName)"
+            ],
+            shortTitle: "Save Note",
+            systemImageName: "square.and.pencil"
         )
     }
 }
