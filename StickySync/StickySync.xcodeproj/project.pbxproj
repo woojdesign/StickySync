@@ -10,6 +10,7 @@
 		A700525F2FE5D0680081736C /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A700525E2FE5D0680081736C /* NotesKit */; };
 		A70052622FE6DC700081736C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A70052612FE6DC700081736C /* Sparkle */; };
 		A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A71D717A2FE833D7008D48F6 /* NotesKit */; };
+		A77762D42FE8A36E0088DECB /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A77762D32FE8A36E0088DECB /* WhisperKit */; };
 		A78F031F2FE88FCF00485C17 /* WoojTokens in Frameworks */ = {isa = PBXBuildFile; productRef = A78F031E2FE88FCF00485C17 /* WoojTokens */; };
 		A78F03212FE88FDC00485C17 /* WoojTokens in Frameworks */ = {isa = PBXBuildFile; productRef = A78F03202FE88FDC00485C17 /* WoojTokens */; };
 /* End PBXBuildFile section */
@@ -60,6 +61,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A77762D42FE8A36E0088DECB /* WhisperKit in Frameworks */,
 				A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */,
 				A78F03212FE88FDC00485C17 /* WoojTokens in Frameworks */,
 			);
@@ -141,6 +143,7 @@
 			packageProductDependencies = (
 				A71D717A2FE833D7008D48F6 /* NotesKit */,
 				A78F03202FE88FDC00485C17 /* WoojTokens */,
+				A77762D32FE8A36E0088DECB /* WhisperKit */,
 			);
 			productName = StickySyncMobile;
 			productReference = A71D71612FE83172008D48F6 /* StickySyncMobile.app */;
@@ -179,6 +182,7 @@
 				A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */,
 				A70052602FE6DC700081736C /* XCRemoteSwiftPackageReference "Sparkle" */,
 				A78F031D2FE88FCF00485C17 /* XCLocalSwiftPackageReference "../../../dev/wooj-tokens" */,
+				A77762D22FE8A36E0088DECB /* XCRemoteSwiftPackageReference "WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A700523E2FE5C55D0081736C /* Products */;
@@ -545,6 +549,14 @@
 				minimumVersion = 2.9.3;
 			};
 		};
+		A77762D22FE8A36E0088DECB /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -561,6 +573,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../../dev/noteskit" */;
 			productName = NotesKit;
+		};
+		A77762D32FE8A36E0088DECB /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A77762D22FE8A36E0088DECB /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
 		};
 		A78F031E2FE88FCF00485C17 /* WoojTokens */ = {
 			isa = XCSwiftPackageProductDependency;

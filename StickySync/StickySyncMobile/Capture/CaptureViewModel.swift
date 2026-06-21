@@ -25,7 +25,7 @@ final class CaptureViewModel: ObservableObject {
     private let writer: NoteWriter
     // High-fidelity final pass (WhisperKit base.en). Falls back to the SFSpeech
     // partial whenever it can't run, so capture never depends on it.
-    private let finalizer: TranscriptionFinalizer = SpeechFinalizer()
+    private let finalizer: TranscriptionFinalizer = WhisperKitFinalizer()
 
     private var cancellables = Set<AnyCancellable>()
     private var ticker: Timer?
