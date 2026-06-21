@@ -273,7 +273,7 @@ public final class CloudKitNoteStore: NoteStore {
         let base = (try? fm.url(for: .applicationSupportDirectory,
                                 in: .userDomainMask,
                                 appropriateFor: nil,
-                                create: true)) ?? fm.homeDirectoryForCurrentUser
+                                create: true)) ?? fm.temporaryDirectory
         let dir = base.appendingPathComponent("StickySync", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("layouts.json")

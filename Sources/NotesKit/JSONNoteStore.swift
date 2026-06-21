@@ -28,7 +28,7 @@ public final class JSONNoteStore: NoteStore {
                                 in: .userDomainMask,
                                 appropriateFor: nil,
                                 create: true))
-            ?? fm.homeDirectoryForCurrentUser
+            ?? fm.temporaryDirectory
         let dir = base.appendingPathComponent("StickySync", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("store.json")
