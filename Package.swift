@@ -4,7 +4,8 @@ import PackageDescription
 let package = Package(
     name: "StickySync",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v13),
+        .iOS(.v16)
     ],
     products: [
         // Expose NotesKit as a library so an external consumer — the Xcode
