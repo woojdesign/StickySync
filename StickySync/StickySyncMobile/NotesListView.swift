@@ -136,30 +136,31 @@ private struct NoteCard: View {
     let note: Note
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+        VStack(alignment: .leading, spacing: WoojSpace.md) {
+            Text(preview)
                 .font(.custom(WoojType.reading.family, size: 16))
-                .foregroundStyle(Appearance.text(note.colorToken))
-                .lineLimit(4)
+                .foregroundStyle(WoojColor.reading)
+                .lineSpacing(3)
+                .lineLimit(5)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-            Spacer(minLength: 10)
+            Spacer(minLength: WoojSpace.xs)
             Text(Self.relativeTime(note.modifiedAt))
-                .font(.system(size: 11))
-                .foregroundStyle(Appearance.text(note.colorToken).opacity(0.6))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(WoojColor.muted)
         }
-        .frame(minHeight: 112, alignment: .topLeading)
-        .padding(12)
-        .background(Appearance.background(note.colorToken))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(WoojColor.line, lineWidth: 1))
+        .frame(minHeight: 120, alignment: .topLeading)
+        .padding(WoojSpace.md)
+        .background(
+            Appearance.background(note.colorToken),
+            in: RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous)
+        )
+        .shadow(color: WoojColor.ink.opacity(0.07), radius: 10, y: 5)
     }
 
-    private var title: String {
-        let first = note.content
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .first.map(String.init) ?? ""
-        return first.isEmpty ? "New note" : first
+    private var preview: String {
+        let t = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? "New note" : t
     }
 
     private static func relativeTime(_ date: Date) -> String {
