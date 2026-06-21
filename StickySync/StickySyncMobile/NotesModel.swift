@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import NotesKit
 
 /// Bridges NotesKit's callback-based `NoteStore` to SwiftUI. Owns the synced

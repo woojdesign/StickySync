@@ -23,7 +23,7 @@ struct NoteEditorView: View {
                 .background(Appearance.background(note.colorToken))
                 .padding(.horizontal, 6)
                 .navigationBarTitleDisplayMode(.inline)
-                .onChange(of: note.content) { _ in scheduleSave() }
+                .onChange(of: note.content) { scheduleSave() }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("Done") { saveNow(); dismiss() }

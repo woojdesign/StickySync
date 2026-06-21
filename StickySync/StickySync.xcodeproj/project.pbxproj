@@ -9,16 +9,36 @@
 /* Begin PBXBuildFile section */
 		A700525F2FE5D0680081736C /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A700525E2FE5D0680081736C /* NotesKit */; };
 		A70052622FE6DC700081736C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A70052612FE6DC700081736C /* Sparkle */; };
+		A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A71D717A2FE833D7008D48F6 /* NotesKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A700523D2FE5C55D0081736C /* StickySync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StickySync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A71D71612FE83172008D48F6 /* StickySyncMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StickySyncMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A71D71782FE83292008D48F6 /* Exceptions for "StickySyncMobile" folder in "StickySyncMobile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A71D71602FE83172008D48F6 /* StickySyncMobile */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A700523F2FE5C55D0081736C /* StickySync */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = StickySync;
+			sourceTree = "<group>";
+		};
+		A71D71622FE83172008D48F6 /* StickySyncMobile */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A71D71782FE83292008D48F6 /* Exceptions for "StickySyncMobile" folder in "StickySyncMobile" target */,
+			);
+			path = StickySyncMobile;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +53,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A71D715E2FE83172008D48F6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,6 +68,8 @@
 			isa = PBXGroup;
 			children = (
 				A700523F2FE5C55D0081736C /* StickySync */,
+				A71D71622FE83172008D48F6 /* StickySyncMobile */,
+				A71D71792FE833D7008D48F6 /* Frameworks */,
 				A700523E2FE5C55D0081736C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,8 +78,16 @@
 			isa = PBXGroup;
 			children = (
 				A700523D2FE5C55D0081736C /* StickySync.app */,
+				A71D71612FE83172008D48F6 /* StickySyncMobile.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A71D71792FE833D7008D48F6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -79,6 +117,29 @@
 			productReference = A700523D2FE5C55D0081736C /* StickySync.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A71D71602FE83172008D48F6 /* StickySyncMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A71D71692FE83173008D48F6 /* Build configuration list for PBXNativeTarget "StickySyncMobile" */;
+			buildPhases = (
+				A71D715D2FE83172008D48F6 /* Sources */,
+				A71D715E2FE83172008D48F6 /* Frameworks */,
+				A71D715F2FE83172008D48F6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A71D71622FE83172008D48F6 /* StickySyncMobile */,
+			);
+			name = StickySyncMobile;
+			packageProductDependencies = (
+				A71D717A2FE833D7008D48F6 /* NotesKit */,
+			);
+			productName = StickySyncMobile;
+			productReference = A71D71612FE83172008D48F6 /* StickySyncMobile.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -90,6 +151,10 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					A700523C2FE5C55D0081736C = {
+						CreatedOnToolsVersion = 26.0;
+						LastSwiftMigration = 2600;
+					};
+					A71D71602FE83172008D48F6 = {
 						CreatedOnToolsVersion = 26.0;
 						LastSwiftMigration = 2600;
 					};
@@ -114,6 +179,7 @@
 			projectRoot = "";
 			targets = (
 				A700523C2FE5C55D0081736C /* StickySync */,
+				A71D71602FE83172008D48F6 /* StickySyncMobile */,
 			);
 		};
 /* End PBXProject section */
@@ -126,10 +192,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A71D715F2FE83172008D48F6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A70052392FE5C55D0081736C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A71D715D2FE83172008D48F6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -330,6 +410,82 @@
 			};
 			name = Release;
 		};
+		A71D716A2FE83173008D48F6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = StickySyncMobile/StickySyncMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BSPX8X9U4B;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StickySyncMobile/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = wooj.StickySyncMobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A71D716B2FE83173008D48F6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = StickySyncMobile/StickySyncMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BSPX8X9U4B;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StickySyncMobile/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = wooj.StickySyncMobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -347,6 +503,15 @@
 			buildConfigurations = (
 				A70052492FE5C5600081736C /* Debug */,
 				A700524A2FE5C5600081736C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A71D71692FE83173008D48F6 /* Build configuration list for PBXNativeTarget "StickySyncMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A71D716A2FE83173008D48F6 /* Debug */,
+				A71D716B2FE83173008D48F6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -380,6 +545,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A70052602FE6DC700081736C /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		A71D717A2FE833D7008D48F6 /* NotesKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A700525D2FE5CDDB0081736C /* XCLocalSwiftPackageReference "../../StickySync" */;
+			productName = NotesKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
