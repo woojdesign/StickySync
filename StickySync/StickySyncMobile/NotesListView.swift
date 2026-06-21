@@ -51,7 +51,11 @@ struct NotesListView: View {
                     }
                 }
             }
+            .background(WoojColor.ground.ignoresSafeArea())
+            .toolbarBackground(WoojColor.ground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
+        .tint(WoojColor.clay)
         .sheet(item: $editing) { note in
             NoteEditorView(note: note)
                 .environmentObject(model)
@@ -72,5 +76,6 @@ private struct NoteCard: View {
             .padding(12)
             .background(Appearance.background(note.colorToken))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(WoojColor.line, lineWidth: 1))
     }
 }

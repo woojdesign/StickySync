@@ -26,14 +26,22 @@ extension NSColor {
 /// Turns the platform-agnostic palette/font catalogs from NotesKit into
 /// concrete AppKit colors and fonts.
 enum Appearance {
+    // wooj-tokens test: route note colors through the WoojSticky range, and use
+    // wooj ink for text (it reads on every warm pastel). StickySync's tokens are
+    // mapped onto the nearest wooj note color.
+    private static let woojStickyByToken: [String: NSColor] = [
+        "butter": .woojButter, "peach": .woojApricot, "rose": .woojRose,
+        "lilac": .woojLilac, "sky": .woojSky, "mint": .woojSage, "sand": .woojCream
+    ]
+
     static func background(for token: String) -> NSColor {
-        let c = Palette.color(for: token)
-        return .dynamic(light: .fromHex(c.lightBackgroundHex), dark: .fromHex(c.darkBackgroundHex))
+        // Resolve to sRGB so `.cgColor` (layer fills) is exact, not a catalog color.
+        let c = woojStickyByToken[token] ?? .woojButter
+        return c.usingColorSpace(.sRGB) ?? c
     }
 
     static func text(for token: String) -> NSColor {
-        let c = Palette.color(for: token)
-        return .dynamic(light: .fromHex(c.lightTextHex), dark: .fromHex(c.darkTextHex))
+        NSColor.woojInk.usingColorSpace(.sRGB) ?? .woojInk
     }
 
     static func font(for option: FontOption, size: CGFloat) -> NSFont {

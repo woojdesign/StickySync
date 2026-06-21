@@ -37,12 +37,11 @@ final class ColorPaletteController: NSViewController {
             button.isBordered = false
             button.wantsLayer = true
             button.layer?.cornerRadius = chip / 2
-            button.layer?.backgroundColor = NSColor.fromHex(color.lightBackgroundHex).cgColor
+            button.layer?.backgroundColor = Appearance.background(for: color.token).cgColor
             let selected = color.token == selectedToken
-            button.layer?.borderWidth = selected ? 2 : 0.5
-            button.layer?.borderColor = selected
-                ? NSColor.fromHex(color.lightTextHex).cgColor
-                : NSColor.black.withAlphaComponent(0.15).cgColor
+            button.layer?.borderWidth = selected ? 2.5 : 0.5
+            button.layer?.borderColor = (selected ? NSColor.woojClay : NSColor.woojLine)
+                .usingColorSpace(.sRGB)?.cgColor
             button.toolTip = color.displayName
             button.tag = i
             button.target = self

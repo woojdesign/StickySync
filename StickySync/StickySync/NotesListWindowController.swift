@@ -62,6 +62,7 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
 
         let newButton = NSButton(title: "New Note", target: self, action: #selector(newNote))
         newButton.bezelStyle = .rounded
+        newButton.bezelColor = .woojClay
         let deleteButton = NSButton(title: "Delete", target: self, action: #selector(deleteClicked))
         deleteButton.bezelStyle = .rounded
         let spacer = NSView()
@@ -72,6 +73,8 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
         bar.translatesAutoresizingMaskIntoConstraints = false
 
         let content = NSView()
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.woojGround.usingColorSpace(.sRGB)?.cgColor
         content.addSubview(scroll)
         content.addSubview(bar)
         NSLayoutConstraint.activate([
@@ -102,6 +105,10 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
                        title: NotePreview.title(for: note),
                        open: isNoteOpen?(note.id) ?? false)
         return cell
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        WoojRowView()
     }
 
     // MARK: - Actions
@@ -141,8 +148,9 @@ final class NoteListCellView: NSView {
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.font = .systemFont(ofSize: 13)
         titleLabel.maximumNumberOfLines = 1
+        titleLabel.textColor = .woojInk
         statusLabel.font = .systemFont(ofSize: 11)
-        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.textColor = .woojTertiary
 
         let textStack = NSStackView(views: [titleLabel, statusLabel])
         textStack.orientation = .vertical
@@ -169,5 +177,30 @@ final class NoteListCellView: NSView {
         swatchView.image = swatch
         titleLabel.stringValue = title
         statusLabel.stringValue = open ? "Open" : "Closed"
+    }
+
+    func setSelected(_ selected: Bool) {
+        titleLabel.textColor = selected ? .woojOnClay : .woojInk
+        statusLabel.textColor = selected ? NSColor.woojOnClay.withAlphaComponent(0.8) : .woojTertiary
+    }
+}
+
+/// Wooj chrome: each row is a warm `surface` card on the `ground`; the selected
+/// row fills with `clay` (and its text flips to `onClay`).
+final class WoojRowView: NSTableRowView {
+    override func drawBackground(in dirtyRect: NSRect) {
+        NSColor.woojSurface.usingColorSpace(.sRGB)?.setFill()
+        cardPath().fill()
+    }
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard isSelected else { return }
+        NSColor.woojClay.usingColorSpace(.sRGB)?.setFill()
+        cardPath().fill()
+    }
+    private func cardPath() -> NSBezierPath {
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 6, dy: 3), xRadius: 8, yRadius: 8)
+    }
+    override var isSelected: Bool {
+        didSet { subviews.forEach { ($0 as? NoteListCellView)?.setSelected(isSelected) } }
     }
 }
