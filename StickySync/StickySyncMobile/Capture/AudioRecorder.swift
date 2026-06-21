@@ -20,14 +20,11 @@ final class AudioRecorder: ObservableObject {
 
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
-    private weak var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
 
-    /// Begins recording. Pass the recognizer's request so each captured buffer
-    /// is forwarded for live transcription (or nil for audio-only).
+    /// Begins recording. Each captured buffer is handed to `onBuffer` (for live
+    /// transcription) as well as written to the `.m4a` and metered.
     @discardableResult
-    func start(feeding request: SFSpeechAudioBufferRecognitionRequest?) throws -> URL {
-        recognitionRequest = request
-
+    func start(onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws -> URL {
         let session = AVAudioSession.sharedInstance()
         // Built-in mic is enough for v1; routing AirPods/Bluetooth input is a
         // later polish (the option constant churned across iOS versions).
@@ -59,7 +56,7 @@ final class AudioRecorder: ObservableObject {
 
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             guard let self else { return }
-            self.recognitionRequest?.append(buffer)
+            onBuffer(buffer)
             try? self.file?.write(from: buffer)
             self.updateLevel(buffer)
         }
@@ -75,7 +72,6 @@ final class AudioRecorder: ObservableObject {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         file = nil
-        recognitionRequest = nil
         isRecording = false
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         DispatchQueue.main.async { self.level = 0 }

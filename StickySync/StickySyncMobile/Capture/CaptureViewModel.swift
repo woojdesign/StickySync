@@ -30,13 +30,9 @@ final class CaptureViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var ticker: Timer?
     private var dismissTask: Task<Void, Never>?
-    private var silenceClock: TimeInterval = 0
     private var lastNote: Note?
     private var starting = false
 
-    // Auto-stop after this much continuous quiet (brief default ~2s).
-    private let silenceLimit: TimeInterval = 2.0
-    private let levelFloor: Float = 0.12
     private let tick: TimeInterval = 0.05
     private let savedDwell: TimeInterval = 1.8
 
@@ -90,14 +86,14 @@ final class CaptureViewModel: ObservableObject {
         guard mic, granted else { phase = .denied; return }
 
         do {
-            let request = try speech.begin()
-            try recorder.start(feeding: request)
+            try speech.begin()
+            try recorder.start { [weak self] buffer in self?.speech.append(buffer) }
         } catch {
             phase = .denied
             return
         }
 
-        partialText = ""; elapsed = 0; silenceClock = 0; lastNote = nil
+        partialText = ""; elapsed = 0; lastNote = nil
         // Load the WhisperKit model while the user talks, so the final pass is
         // ready the instant they stop.
         finalizer.prewarm()
@@ -154,11 +150,11 @@ final class CaptureViewModel: ObservableObject {
     }
 
     private func onTick() {
+        // Just the elapsed timer now. Capture ends only when the user taps Done —
+        // never automatically on silence — so a thinking pause can't cut a note
+        // short or create one on its own.
         guard phase == .listening else { return }
         elapsed += tick
-        if level < levelFloor { silenceClock += tick } else { silenceClock = 0 }
-        // Don't auto-stop in the first beat (lets the user start talking).
-        if silenceClock >= silenceLimit, elapsed > 0.8 { done() }
     }
 
     private func stopEngines() {
@@ -168,6 +164,6 @@ final class CaptureViewModel: ObservableObject {
 
     private func reset() {
         partialText = ""; savedText = ""; savedAt = nil
-        elapsed = 0; silenceClock = 0; level = 0; lastNote = nil
+        elapsed = 0; level = 0; lastNote = nil
     }
 }
