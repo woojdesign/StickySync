@@ -28,7 +28,13 @@ struct NotesListView: View {
                 }
                 .padding(16)
             }
+            // Ground fills the scroll area. Inline title (below) lives on the nav
+            // bar, not in the scroll content, so this fill can't paint over it.
+            .background(WoojColor.ground.ignoresSafeArea())
             .navigationTitle("Notes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(WoojColor.ground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -51,9 +57,6 @@ struct NotesListView: View {
                     }
                 }
             }
-            .background(WoojColor.ground.ignoresSafeArea())
-            .toolbarBackground(WoojColor.ground, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
         }
         .tint(WoojColor.clay)
         .sheet(item: $editing) { note in
