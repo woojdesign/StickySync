@@ -27,6 +27,7 @@ final class NoteContentView: NSView {
 
     let header = HeaderView()
     let colorButton = NSButton()
+    let shareButton = NSButton()
     let fontButton = NSButton()
     let closeButton = NSButton()
     let scrollView = NSScrollView()
@@ -58,6 +59,9 @@ final class NoteContentView: NSView {
 
         configureIconButton(colorButton, symbol: "paintpalette", tip: "Change color", action: #selector(colorTapped))
         header.addSubview(colorButton)
+
+        configureIconButton(shareButton, symbol: "square.and.arrow.up", tip: "Share note", action: #selector(shareTapped))
+        header.addSubview(shareButton)
 
         fontButton.title = "Aa"
         fontButton.isBordered = false
@@ -107,6 +111,11 @@ final class NoteContentView: NSView {
     @objc private func colorTapped() { onColor?() }
     @objc private func fontTapped() { onFont?() }
     @objc private func closeTapped() { onClose?() }
+    @objc private func shareTapped() {
+        let text = textView.string
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        NSSharingServicePicker(items: [text]).show(relativeTo: shareButton.bounds, of: shareButton, preferredEdge: .minY)
+    }
 
     func apply(colorToken: String, font: NSFont) {
         self.colorToken = colorToken
@@ -125,6 +134,7 @@ final class NoteContentView: NSView {
 
         let tint = textColor.withAlphaComponent(0.85)
         colorButton.contentTintColor = tint
+        shareButton.contentTintColor = tint
         closeButton.contentTintColor = tint
         fontButton.attributedTitle = NSAttributedString(string: "Aa", attributes: [
             .foregroundColor: tint,
@@ -138,11 +148,13 @@ final class NoteContentView: NSView {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
                 colorButton.animator().alphaValue = alpha
+                shareButton.animator().alphaValue = alpha
                 fontButton.animator().alphaValue = alpha
                 closeButton.animator().alphaValue = alpha
             }
         } else {
             colorButton.alphaValue = alpha
+            shareButton.alphaValue = alpha
             fontButton.alphaValue = alpha
             closeButton.alphaValue = alpha
         }
@@ -174,6 +186,7 @@ final class NoteContentView: NSView {
         let size: CGFloat = 16
         let cy = (headerHeight - size) / 2
         colorButton.frame = NSRect(x: pad, y: cy, width: size, height: size)
+        shareButton.frame = NSRect(x: pad + size + 6, y: cy, width: size, height: size)
         closeButton.frame = NSRect(x: header.bounds.width - pad - size, y: cy, width: size, height: size)
         fontButton.frame = NSRect(x: header.bounds.width - pad - size - 6 - 24, y: cy, width: 24, height: size)
 
