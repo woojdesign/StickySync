@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import NotesKit
 import WoojTokens
 
@@ -59,14 +60,24 @@ struct NoteEditorView: View {
                 .foregroundStyle(WoojColor.clay)
             }
             Spacer()
-            Menu {
-                Button(role: .destructive) {
-                    model.delete(note); dismiss()
-                } label: { Label("Delete", systemImage: "trash") }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(WoojColor.clay)
+            HStack(spacing: WoojSpace.lg) {
+                ShareLink(item: note.content) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(WoojColor.clay)
+                }
+                Menu {
+                    Button { UIPasteboard.general.string = note.content } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    Button(role: .destructive) {
+                        model.delete(note); dismiss()
+                    } label: { Label("Delete", systemImage: "trash") }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(WoojColor.clay)
+                }
             }
         }
         .padding(.horizontal, WoojSpace.md)

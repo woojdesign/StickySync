@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import NotesKit
 import WoojTokens
 
@@ -8,6 +9,7 @@ import WoojTokens
 /// (Voice capture, and the pushed editor + bottom palette dock, are deferred.)
 struct NotesListView: View {
     @EnvironmentObject private var model: NotesModel
+    @StateObject private var sync = SyncMonitor()
     @State private var editing: Note?
     @State private var search = ""
     @State private var capturing = false
@@ -37,6 +39,12 @@ struct NotesListView: View {
                                 NoteCard(note: note)
                                     .onTapGesture { editing = note }
                                     .contextMenu {
+                                        Button { UIPasteboard.general.string = note.content } label: {
+                                            Label("Copy", systemImage: "doc.on.doc")
+                                        }
+                                        ShareLink(item: note.content) {
+                                            Label("Share", systemImage: "square.and.arrow.up")
+                                        }
                                         Button(role: .destructive) {
                                             model.delete(note)
                                         } label: {
@@ -82,12 +90,34 @@ struct NotesListView: View {
             Text("Notes")
                 .font(.custom(WoojType.reading.family, size: 34).weight(.semibold))
                 .foregroundStyle(WoojColor.ink)
-            Text("^[\(model.notes.count) note](inflect: true)")
-                .font(.system(size: 13))
-                .foregroundStyle(WoojColor.tertiary)
+            HStack(spacing: 6) {
+                Text("^[\(model.notes.count) note](inflect: true)")
+                if sync.state != .idle {
+                    Text("·")
+                    syncStatus
+                }
+            }
+            .font(.system(size: 13))
+            .foregroundStyle(WoojColor.tertiary)
+            .animation(WoojMotion.calm.animation, value: sync.state)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+
+    /// Calm CloudKit sync state, so an eventual-consistency delay reads as
+    /// "Syncing…" rather than "my note didn't save."
+    @ViewBuilder private var syncStatus: some View {
+        switch sync.state {
+        case .syncing:
+            HStack(spacing: 4) { Image(systemName: "arrow.triangle.2.circlepath"); Text("Syncing…") }
+        case .synced:
+            HStack(spacing: 4) { Image(systemName: "checkmark.icloud"); Text("Synced") }
+        case .error:
+            HStack(spacing: 4) { Image(systemName: "exclamationmark.icloud"); Text("Sync paused") }
+        case .idle:
+            EmptyView()
+        }
     }
 
     private var emptyState: some View {
