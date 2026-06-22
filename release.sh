@@ -25,7 +25,13 @@ VERSION="${1:?usage: ./release.sh <version>   e.g. ./release.sh 0.2.0}"
 TAG="v$VERSION"
 REPO="woojdesign/StickySync"
 
-# 1. Build + Developer ID sign + notarize + staple + zip (non-sandboxed, with
+# 1. Polished release notes from `git log <last-tag>..HEAD` via `claude -p`,
+#    opened in $EDITOR for a final pass.
+./scripts/release_notes.sh "$VERSION" --platform mac
+CHANGELOG="release-notes/$VERSION.md"
+[ -f "$CHANGELOG" ] || { echo "error: $CHANGELOG missing"; exit 1; }
+
+# 2. Build + Developer ID sign + notarize + staple + zip (non-sandboxed, with
 #    the Sparkle Info.plist).
 ./notarize.sh "$VERSION"
 
@@ -33,7 +39,7 @@ BUILD_NUMBER="$(git rev-list --count HEAD)"
 ZIP="build/StickySync-$VERSION-$BUILD_NUMBER.zip"
 [ -f "$ZIP" ] || { echo "error: expected $ZIP from notarize.sh"; exit 1; }
 
-# 2. EdDSA-sign the update + build the appcast (private key read from keychain).
+# 3. EdDSA-sign the update + build the appcast (private key read from keychain).
 GEN_APPCAST="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type f -name generate_appcast -path '*artifacts/sparkle*' 2>/dev/null | head -1)"
 [ -n "$GEN_APPCAST" ] || { echo "error: Sparkle's generate_appcast not found"; exit 1; }
 
@@ -49,8 +55,14 @@ echo "==> Signing update + generating appcast"
 # picked up as a second appcast entry.
 cp "$RELEASES/$(basename "$ZIP")" "$RELEASES/StickySync.zip"
 
-# Friend-facing install guide, used as the GitHub release notes.
+# Friend-facing release notes: polished changelog + install guide.
 cat > "$RELEASES/NOTES.md" <<EOF
+## What's new in $VERSION
+
+$(cat "$CHANGELOG")
+
+---
+
 ## Install StickySync $VERSION
 
 Requires macOS 15.6 or later.
@@ -67,7 +79,7 @@ Requires macOS 15.6 or later.
 **Sync** (optional): while signed into iCloud, your notes sync across your own Macs.
 EOF
 
-# 3. Publish the GitHub Release. SUFeedURL is .../releases/latest/download/
+# 4. Publish the GitHub Release. SUFeedURL is .../releases/latest/download/
 #    appcast.xml, so the newest release's appcast is always the live feed;
 #    StickySync.zip is the stable friend-facing download.
 echo "==> Publishing GitHub release $TAG"

@@ -6,6 +6,7 @@
 *.app/
 DerivedData/
 build/
+build-ios/
 *.xcarchive
 
 # Xcode user-specific state (track the .xcodeproj itself, not these)
@@ -13,6 +14,9 @@ xcuserdata/
 *.xcuserstate
 
 .DS_Store
+
+# Python bytecode (from scripts/asc_whats_new.py)
+__pycache__/
 
 # Bundled WhisperKit model (153MB) — local only; runtime download is the fallback
 WhisperModel/
