@@ -38,20 +38,19 @@ final class AudioRecorder: ObservableObject {
         // working if the device locks mid-capture.
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("m4a")
+            .appendingPathExtension("caf")
         FileManager.default.createFile(
             atPath: url.path, contents: nil,
             attributes: [.protectionKey: FileProtectionType.completeUnlessOpen]
         )
-        // Derive AAC settings from the input format so the file's processing
-        // format matches the tap buffers (otherwise `write(from:)` fails).
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: format.sampleRate,
-            AVNumberOfChannelsKey: format.channelCount,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-        file = try AVAudioFile(forWriting: url, settings: settings)
+        // Write the tap's *native* PCM format. Deriving AAC settings (as before)
+        // could leave the file's processing format mismatched against the float
+        // tap buffers — `write(from:)` then throws, the `try?` silently drops every
+        // buffer, and the recording is empty. WhisperKit then hallucinates a short
+        // phrase ("here and i") over a perfectly good live transcript. Native PCM
+        // in a CAF always matches the buffer, so nothing is dropped; WhisperKit
+        // reads CAF fine. Bigger temp file, but it's transcribed once and tossed.
+        file = try AVAudioFile(forWriting: url, settings: format.settings)
         fileURL = url
 
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in

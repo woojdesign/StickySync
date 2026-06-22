@@ -130,7 +130,15 @@ final class CaptureViewModel: ObservableObject {
         // note still upgrades in the list. Falls back to the fast text on any
         // failure — a note is never lost.
         let refined = await finalizer.finalize(audioURL: recorder.fileURL, fastPartial: text)
-        if refined != text, !refined.isEmpty {
+        // The polish must refine, never gut. A bad/empty recording makes Whisper
+        // hallucinate a short phrase ("here and i") — only accept the refined text
+        // when it kept most of the live transcript's length, else keep the (good)
+        // SFSpeech text.
+        let fastWords = text.split(whereSeparator: \.isWhitespace).count
+        let refinedWords = refined.split(whereSeparator: \.isWhitespace).count
+        let isImprovement = !refined.isEmpty && refined != text
+            && refinedWords >= max(3, Int(Double(fastWords) * 0.6))
+        if isImprovement {
             savedText = refined
             if let written { writer.update(written, content: refined) }
         }
