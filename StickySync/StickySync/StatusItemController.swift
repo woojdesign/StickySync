@@ -11,6 +11,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private let store: NoteStore
     private let statusItem: NSStatusItem
+    private let sync = SyncMonitor()
 
     init(store: NoteStore) {
         self.store = store
@@ -55,8 +56,39 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let listItem = NSMenuItem(title: "Show All Notes…", action: #selector(showList), keyEquivalent: "")
         listItem.target = self
         menu.addItem(listItem)
+
+        // Quiet sync-status line, so an eventual-consistency delay reads as
+        // "Syncing…" rather than "my note didn't sync."
+        let syncItem = NSMenuItem(title: syncTitle, action: nil, keyEquivalent: "")
+        syncItem.isEnabled = false
+        syncItem.image = syncImage
+        menu.addItem(syncItem)
+
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit StickySync",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+    }
+
+    private var syncTitle: String {
+        switch sync.state {
+        case .syncing: return "Syncing…"
+        case .synced:  return "Synced"
+        case .error:   return "Sync paused"
+        case .idle:    return "iCloud"
+        }
+    }
+
+    private var syncImage: NSImage? {
+        let name: String
+        switch sync.state {
+        case .syncing: name = "arrow.triangle.2.circlepath"
+        case .synced:  name = "checkmark.icloud"
+        case .error:   name = "exclamationmark.icloud"
+        case .idle:    name = "icloud"
+        }
+        let img = NSImage(systemSymbolName: name, accessibilityDescription: syncTitle)
+        img?.isTemplate = true
+        return img
     }
 
     @objc private func newNote() { onNewNote?() }
