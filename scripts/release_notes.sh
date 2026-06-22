@@ -36,11 +36,20 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Range: explicit --since wins, otherwise last tag..HEAD, otherwise all of HEAD.
+# Range: explicit --since wins, otherwise last platform-relevant tag..HEAD,
+# otherwise all of HEAD. Tag scheme:
+#   - Mac releases:  v0.3.1, v0.3.0, ... (unprefixed, existing convention)
+#   - iOS releases:  ios/v0.3.1, ios/v0.3.2, ...
+# Each platform's "since" lookup filters to its own tag namespace so a Mac
+# release doesn't pick up an iOS tag (or vice-versa).
 if [ -n "$SINCE" ]; then
     RANGE="$SINCE..HEAD"
 else
-    LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+    case "$PLATFORM" in
+        ios) LAST_TAG="$(git describe --tags --abbrev=0 --match 'ios/v*' 2>/dev/null || true)" ;;
+        mac) LAST_TAG="$(git describe --tags --abbrev=0 --match 'v*' --exclude 'ios/*' 2>/dev/null || true)" ;;
+        *)   LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)" ;;
+    esac
     RANGE="${LAST_TAG:+$LAST_TAG..HEAD}"
     RANGE="${RANGE:-HEAD}"
 fi
