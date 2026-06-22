@@ -32,6 +32,8 @@ struct SavedView: View {
                 .foregroundColor(WoojColor.reading)
                 .lineSpacing(WoojType.reading.lineSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentTransition(.opacity)
+                .animation(WoojMotion.calm.animation, value: vm.savedText)
 
             HStack(spacing: WoojSpace.xs) {
                 Image(systemName: "checkmark")
@@ -50,12 +52,21 @@ struct SavedView: View {
 
     private var hint: some View {
         HStack(spacing: WoojSpace.xxs) {
-            Image(systemName: "arrow.up.forward")
-                .font(.system(size: 10, weight: .semibold))
-            Text("Saved")
-                .woojStyle(WoojType.caption)
+            if vm.refining {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(WoojColor.clay)
+                Text("Polishing transcript…")
+                    .woojStyle(WoojType.caption)
+            } else {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Saved")
+                    .woojStyle(WoojType.caption)
+            }
         }
         .foregroundColor(WoojColor.tertiary)
+        .animation(WoojMotion.calm.animation, value: vm.refining)
     }
 
     private var footer: String {

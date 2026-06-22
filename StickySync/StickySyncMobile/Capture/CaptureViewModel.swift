@@ -19,6 +19,10 @@ final class CaptureViewModel: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var savedText: String = ""
     @Published private(set) var savedAt: Date?
+    /// True while the WhisperKit second pass is refining the just-saved text, so
+    /// the saved card can show it's still polishing — not a final, possibly-wrong
+    /// transcript with no recourse.
+    @Published private(set) var refining = false
 
     private let recorder = AudioRecorder()
     private let speech = SpeechTranscriber()
@@ -93,7 +97,7 @@ final class CaptureViewModel: ObservableObject {
             return
         }
 
-        partialText = ""; elapsed = 0; lastNote = nil
+        partialText = ""; elapsed = 0; lastNote = nil; refining = false
         // Load the WhisperKit model while the user talks, so the final pass is
         // ready the instant they stop.
         finalizer.prewarm()
@@ -115,28 +119,43 @@ final class CaptureViewModel: ObservableObject {
         // Show immediately with the fast text; write the note now.
         savedText = text
         savedAt = Date()
-        lastNote = writer.write(text)
+        let written = writer.write(text)
+        lastNote = written
+        refining = true                  // a second pass is coming — the card shows it
         withAnimation(WoojMotion.settle.animation) { phase = .saved }
-        scheduleDismiss()
+        scheduleDismiss()                // holds the card while `refining`, capped
 
-        // Finalize asynchronously and silently replace (Phase 3: WhisperKit).
+        // Second pass (WhisperKit): re-transcribe the recording and replace the
+        // fast text. Runs to completion even if the card already dismissed, so the
+        // note still upgrades in the list. Falls back to the fast text on any
+        // failure — a note is never lost.
         let refined = await finalizer.finalize(audioURL: recorder.fileURL, fastPartial: text)
         if refined != text, !refined.isEmpty {
             savedText = refined
-            if let note = lastNote { writer.update(note, content: refined) }
+            if let written { writer.update(written, content: refined) }
         }
+        refining = false
     }
 
     private func scheduleDismiss() {
         dismissTask?.cancel()
-        dismissTask = Task { [savedDwell] in
-            try? await Task.sleep(nanoseconds: UInt64(savedDwell * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard self.phase == .saved else { return }
-                self.reset()
-                withAnimation(WoojMotion.calm.animation) { self.phase = .idle }
+        dismissTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Hold the saved card while the second pass runs, capped so a cold
+            // model download can't pin it open; then a brief dwell to read the
+            // polished text, then dismiss.
+            let cap = 6.0, step = 0.1
+            var waited = 0.0
+            while self.refining && waited < cap {
+                try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
+                if Task.isCancelled { return }
+                waited += step
             }
+            try? await Task.sleep(nanoseconds: UInt64(self.savedDwell * 1_000_000_000))
+            if Task.isCancelled { return }
+            guard self.phase == .saved else { return }
+            self.reset()
+            withAnimation(WoojMotion.calm.animation) { self.phase = .idle }
         }
     }
 
@@ -164,6 +183,6 @@ final class CaptureViewModel: ObservableObject {
 
     private func reset() {
         partialText = ""; savedText = ""; savedAt = nil
-        elapsed = 0; level = 0; lastNote = nil
+        elapsed = 0; level = 0; lastNote = nil; refining = false
     }
 }
