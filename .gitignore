@@ -13,3 +13,6 @@ xcuserdata/
 *.xcuserstate
 
 .DS_Store
+
+# Bundled WhisperKit model (153MB) — local only; runtime download is the fallback
+WhisperModel/
