@@ -18,5 +18,9 @@ xcuserdata/
 # Python bytecode (from scripts/asc_whats_new.py)
 __pycache__/
 
+# Transient release-script logs
+build-ios-run.log
+build/release-*.log
+
 # Bundled WhisperKit model (153MB) — local only; runtime download is the fallback
 WhisperModel/
