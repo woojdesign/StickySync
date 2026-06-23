@@ -162,6 +162,7 @@ public final class MarkdownTextStorage: NSTextStorage {
         backing.removeAttribute(.strikethroughColor, range: range)
         backing.removeAttribute(.underlineStyle, range: range)
         backing.removeAttribute(.link, range: range)
+        backing.removeAttribute(.markdownCheckboxState, range: range)
         backing.removeAttribute(.paragraphStyle, range: range)
         backing.setAttributes([
             .font: baseFont,
@@ -172,9 +173,39 @@ public final class MarkdownTextStorage: NSTextStorage {
         for run in runs where run.style != MarkdownStyle() {
             backing.addAttributes(attributes(for: run.style), range: run.range)
         }
-        // List paragraph styling deferred — was confusing the layout manager,
-        // causing the cursor to skip after each keystroke. Will re-add via
-        // typing-attribute path in 0.4.1.
+        markCheckboxSlots(in: range)
+    }
+
+    /// Walk lines in `range`; for each line that starts with `- [ ] ` or
+    /// `- [x] ` (or `*` variants), tag the 3-character `[ ]` / `[x]` slot
+    /// with the `.markdownCheckboxState` attribute (Bool). The layout
+    /// manager reads this attribute to swap the literal characters for a
+    /// `☐` / `☑` glyph at draw time.
+    private func markCheckboxSlots(in range: NSRange) {
+        let ns = backing.string as NSString
+        var cursor = range.location
+        let end = range.upperBound
+        while cursor < end {
+            let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+            if let slot = detectCheckboxSlot(in: ns, lineStart: lineRange.location, lineLen: lineRange.length) {
+                backing.addAttribute(.markdownCheckboxState, value: slot.checked, range: slot.range)
+            }
+            cursor = lineRange.upperBound
+            if cursor <= lineRange.location { break }
+        }
+    }
+
+    private func detectCheckboxSlot(in ns: NSString, lineStart: Int, lineLen: Int) -> (range: NSRange, checked: Bool)? {
+        guard lineLen >= 6 else { return nil }
+        let first = ns.character(at: lineStart)
+        guard first == 0x2D || first == 0x2A else { return nil }
+        guard ns.character(at: lineStart + 1) == 0x20 else { return nil }
+        guard ns.character(at: lineStart + 2) == 0x5B else { return nil }
+        let state = ns.character(at: lineStart + 3)
+        guard state == 0x20 || state == 0x78 || state == 0x58 else { return nil }
+        guard ns.character(at: lineStart + 4) == 0x5D else { return nil }
+        guard ns.character(at: lineStart + 5) == 0x20 else { return nil }
+        return (NSRange(location: lineStart + 2, length: 3), state == 0x78 || state == 0x58)
     }
 
     /// For lines that begin with a list marker, give the paragraph a hanging
