@@ -13,7 +13,78 @@
 
 import Foundation
 
+public enum NewlineAction: Equatable {
+    /// The current list line has nothing but the prefix; pressing Enter
+    /// cancels the prefix (so the user is out of the list) rather than
+    /// continuing it. Caller should delete `removeRange` and consume Enter.
+    case cancelPrefix(removeRange: NSRange)
+    /// The current line is a non-empty list item; on Enter, insert this
+    /// string at the insertion point and consume the keystroke. The string
+    /// is `\n` plus the continuation prefix.
+    case insertString(String)
+}
+
 public enum MarkdownEditing {
+
+    /// Decide what should happen when the user presses Enter at `point`. If
+    /// nil, the caller should let the system handle Enter normally.
+    ///
+    /// Behavior:
+    ///   * `- item`              + Enter → insert `\n- ` on next line.
+    ///   * `- `                  + Enter → cancel the prefix (exit list).
+    ///   * `- [ ] item`          + Enter → insert `\n- [ ] `.
+    ///   * `- [ ] `              + Enter → cancel the prefix.
+    ///   * `- [x] item`          + Enter → insert `\n- [ ] ` (continuation
+    ///                                      defaults to unchecked).
+    ///   * `- [x] `              + Enter → cancel the prefix.
+    public static func newlineAction(in storage: NSMutableAttributedString,
+                                     at point: Int) -> NewlineAction? {
+        let ns = storage.string as NSString
+        guard point >= 0, point <= ns.length else { return nil }
+        let lineRange = ns.lineRange(for: NSRange(location: point, length: 0))
+        // Strip a trailing \n if present so prefix-detection sees the actual
+        // line content.
+        var contentLen = lineRange.length
+        if contentLen > 0,
+           ns.character(at: lineRange.location + contentLen - 1) == 0x0A {
+            contentLen -= 1
+        }
+        let lineContent = ns.substring(with: NSRange(location: lineRange.location, length: contentLen)) as NSString
+        guard let prefix = listPrefix(of: lineContent) else { return nil }
+
+        if prefix.length == lineContent.length {
+            // Line is the prefix and nothing else — user wants out.
+            return .cancelPrefix(removeRange: NSRange(location: lineRange.location, length: prefix.length))
+        }
+        return .insertString("\n" + continuationPrefix(for: prefix as String))
+    }
+
+    /// Returns the prefix substring if `line` is a list item, else nil.
+    private static func listPrefix(of line: NSString) -> NSString? {
+        guard line.length >= 2 else { return nil }
+        let first = line.character(at: 0)
+        guard first == 0x2D || first == 0x2A else { return nil }
+        guard line.character(at: 1) == 0x20 else { return nil }
+        if line.length >= 6,
+           line.character(at: 2) == 0x5B,
+           (line.character(at: 3) == 0x20 || line.character(at: 3) == 0x78 || line.character(at: 3) == 0x58),
+           line.character(at: 4) == 0x5D,
+           line.character(at: 5) == 0x20 {
+            return line.substring(with: NSRange(location: 0, length: 6)) as NSString
+        }
+        return line.substring(with: NSRange(location: 0, length: 2)) as NSString
+    }
+
+    /// Continuation prefix: a checked item rolls forward as unchecked, so
+    /// you don't accidentally mark a brand-new line as already-done.
+    private static func continuationPrefix(for prefix: String) -> String {
+        switch prefix {
+        case "- [x] ", "- [X] ": return "- [ ] "
+        case "* [x] ", "* [X] ": return "* [ ] "
+        default: return prefix
+        }
+    }
+
 
     /// Toggle bold (`**...**`) on the given selection.
     public static func toggleBold(in storage: NSMutableAttributedString,

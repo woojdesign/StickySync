@@ -100,48 +100,96 @@ public final class MarkdownTextStorage: NSTextStorage {
     // MARK: - Restyling
 
     public override func processEditing() {
-        // Re-parse + re-apply attributes for the whole string. Sticky notes
-        // are short; full re-parse is faster than the bookkeeping to scope
-        // changes to a paragraph range, and is correct under any edit shape.
+        // Inside processEditing we MUST NOT call self.setAttributes /
+        // self.addAttributes — those wrap in beginEditing/endEditing, which
+        // Apple's docs forbid here (and which manifested as the cursor
+        // snapping to end-of-text after every keystroke). Instead, mutate
+        // the backing store directly and post a single edited() notification.
         let full = NSRange(location: 0, length: backing.length)
         if full.length > 0 {
-            applyBaselineAttributes(in: full)
-            let runs = MarkdownSyntax.parse(backing.string)
-            for run in runs where run.style != MarkdownStyle() {
-                let merged = attributes(for: run.style)
-                addAttributes(merged, range: run.range)
-            }
+            restyleBacking(in: full)
+            edited(.editedAttributes, range: full, changeInLength: 0)
         }
         super.processEditing()
     }
 
-    /// Re-styles without an edit having happened — e.g. when the base font or
-    /// colors change. Calls into the same code path via a no-op edited().
+    /// Restyles when something other than the text changed — base font, base
+    /// color. Safe to wrap in its own edit cycle because we're outside any
+    /// in-flight processEditing.
     private func restyleAll() {
         let full = NSRange(location: 0, length: backing.length)
         guard full.length > 0 else { return }
         beginEditing()
-        applyBaselineAttributes(in: full)
-        let runs = MarkdownSyntax.parse(backing.string)
-        for run in runs where run.style != MarkdownStyle() {
-            let merged = attributes(for: run.style)
-            addAttributes(merged, range: run.range)
-        }
+        restyleBacking(in: full)
         edited(.editedAttributes, range: full, changeInLength: 0)
         endEditing()
     }
 
-    private func applyBaselineAttributes(in range: NSRange) {
-        // Strip prior overrides first; otherwise stale strikethrough/links
-        // bleed when characters are deleted.
-        removeAttribute(.strikethroughStyle, range: range)
-        removeAttribute(.strikethroughColor, range: range)
-        removeAttribute(.underlineStyle, range: range)
-        removeAttribute(.link, range: range)
-        setAttributes([
+    /// Re-styles `backing` directly (no edited() calls). Whoever invokes this
+    /// is responsible for posting a single edited() afterward.
+    private func restyleBacking(in range: NSRange) {
+        backing.removeAttribute(.strikethroughStyle, range: range)
+        backing.removeAttribute(.strikethroughColor, range: range)
+        backing.removeAttribute(.underlineStyle, range: range)
+        backing.removeAttribute(.link, range: range)
+        backing.removeAttribute(.paragraphStyle, range: range)
+        backing.setAttributes([
             .font: baseFont,
             .foregroundColor: textColor,
         ], range: range)
+
+        let runs = MarkdownSyntax.parse(backing.string)
+        for run in runs where run.style != MarkdownStyle() {
+            backing.addAttributes(attributes(for: run.style), range: run.range)
+        }
+        applyListParagraphStyles(in: range)
+    }
+
+    /// For lines that begin with a list marker, give the paragraph a hanging
+    /// indent so wrapped content aligns with the start of the content after
+    /// the marker (visually reads as a real bulleted list, not "-" prose).
+    private func applyListParagraphStyles(in range: NSRange) {
+        let ns = backing.string as NSString
+        var cursor = range.location
+        let end = range.upperBound
+        while cursor < end {
+            let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+            let line = ns.substring(with: lineRange) as NSString
+            if let indent = listIndent(for: line) {
+                let style = NSMutableParagraphStyle()
+                style.firstLineHeadIndent = 0
+                style.headIndent = indent
+                #if canImport(AppKit)
+                style.paragraphSpacing = 1
+                #endif
+                backing.addAttribute(.paragraphStyle, value: style, range: lineRange)
+            }
+            cursor = lineRange.upperBound
+            if cursor <= lineRange.location { break }  // safety
+        }
+    }
+
+    /// Returns the head-indent (in points) for a list line, or nil if the
+    /// line isn't a list item. The indent is the width of the marker prefix
+    /// in `baseFont`, so wrapped content tucks under the first character of
+    /// the item's text.
+    private func listIndent(for line: NSString) -> CGFloat? {
+        // mirrors MarkdownSyntax.detectList — keep in sync.
+        guard line.length >= 2 else { return nil }
+        let first = line.character(at: 0)
+        guard first == 0x2D || first == 0x2A else { return nil }
+        guard line.character(at: 1) == 0x20 else { return nil }
+        var prefixLen = 2
+        if line.length >= 6,
+           line.character(at: 2) == 0x5B,
+           (line.character(at: 3) == 0x20 || line.character(at: 3) == 0x78 || line.character(at: 3) == 0x58),
+           line.character(at: 4) == 0x5D,
+           line.character(at: 5) == 0x20 {
+            prefixLen = 6
+        }
+        let prefix = line.substring(with: NSRange(location: 0, length: prefixLen)) as NSString
+        let attrs: [NSAttributedString.Key: Any] = [.font: baseFont]
+        return prefix.size(withAttributes: attrs).width
     }
 
     // MARK: - Style → attribute mapping

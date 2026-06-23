@@ -14,6 +14,28 @@ import AppKit
 
 final class MarkdownNSTextView: NSTextView {
 
+    /// Auto-continue list items when the user hits Enter: `- item ⏎` lands
+    /// the cursor on the next line already prefixed with `- `. An Enter on
+    /// an empty list line cancels the prefix (so you can step out of the
+    /// list without manual deletion).
+    override func insertNewline(_ sender: Any?) {
+        if let storage = textStorage,
+           let action = MarkdownEditing.newlineAction(in: storage, at: selectedRange().location) {
+            switch action {
+            case .cancelPrefix(let removeRange):
+                storage.replaceCharacters(in: removeRange, with: "")
+                setSelectedRange(NSRange(location: removeRange.location, length: 0))
+                return
+            case .insertString(let s):
+                let r = selectedRange()
+                storage.replaceCharacters(in: r, with: s)
+                setSelectedRange(NSRange(location: r.location + (s as NSString).length, length: 0))
+                return
+            }
+        }
+        super.insertNewline(sender)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown, let storage = textStorage else {
             return super.performKeyEquivalent(with: event)

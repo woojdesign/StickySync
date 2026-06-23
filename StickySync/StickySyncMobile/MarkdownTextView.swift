@@ -113,6 +113,30 @@ struct MarkdownTextView: UIViewRepresentable {
         func textViewDidEndEditing(_ textView: UITextView) {
             if isFocused { isFocused = false }
         }
+
+        /// Auto-continue list items on Enter, mirroring the Mac behavior.
+        func textView(_ textView: UITextView,
+                      shouldChangeTextIn range: NSRange,
+                      replacementText text: String) -> Bool {
+            guard text == "\n" else { return true }
+            guard let storage = textView.textStorage as? MarkdownTextStorage else { return true }
+            guard let action = MarkdownEditing.newlineAction(in: storage, at: range.location) else {
+                return true
+            }
+            switch action {
+            case .cancelPrefix(let removeRange):
+                storage.replaceCharacters(in: removeRange, with: "")
+                textView.selectedRange = NSRange(location: removeRange.location, length: 0)
+            case .insertString(let s):
+                storage.replaceCharacters(in: range, with: s)
+                textView.selectedRange = NSRange(location: range.location + (s as NSString).length, length: 0)
+            }
+            // We mutated the storage directly, so SwiftUI binding needs an
+            // explicit sync.
+            let str = textView.text ?? ""
+            if self.text != str { self.text = str }
+            return false
+        }
     }
 }
 
