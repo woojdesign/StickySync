@@ -104,14 +104,30 @@ struct MarkdownTextView: UIViewRepresentable {
             // text; SwiftUI binding receives only the raw string.
             let s = textView.text ?? ""
             if text != s { text = s }
+            refreshActiveMarkerRange(in: textView)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             if !isFocused { isFocused = true }
+            refreshActiveMarkerRange(in: textView)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
             if isFocused { isFocused = false }
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            refreshActiveMarkerRange(in: textView)
+        }
+
+        private func refreshActiveMarkerRange(in textView: UITextView) {
+            guard let storage = textView.textStorage as? MarkdownTextStorage else { return }
+            let ns = (textView.text ?? "") as NSString
+            guard ns.length > 0 else { return }
+            let selected = textView.selectedRange
+            let paragraph = ns.paragraphRange(for: NSRange(location: selected.location, length: 0))
+            let active = NSUnionRange(paragraph, selected)
+            storage.setActiveLineRange(active)
         }
 
         /// Auto-continue list items on Enter, mirroring the Mac behavior.

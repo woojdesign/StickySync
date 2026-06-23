@@ -50,6 +50,17 @@ public final class MarkdownTextStorage: NSTextStorage {
         didSet { restyleAll() }
     }
 
+    /// Paragraph range containing the current cursor / selection. Hideable
+    /// inline markers OUTSIDE this range get faded to a much-dimmer color
+    /// (~6% alpha) at draw time; INSIDE markers stay at the normal
+    /// `markerColor`. `nil` means "no active selection yet" — all markers
+    /// render at their normal `markerColor`.
+    ///
+    /// Updated by the host's selection observer (`textViewDidChangeSelection`
+    /// on both platforms). Selection-driven, not edit-driven — no edit
+    /// cycle, no cursor jump.
+    private var activeLineRange: NSRange?
+
     public init(baseFont: PlatformFont, textColor: PlatformColor, markerColor: PlatformColor) {
         self.baseFont = baseFont
         self.textColor = textColor
@@ -155,6 +166,49 @@ public final class MarkdownTextStorage: NSTextStorage {
         endEditing()
     }
 
+    /// Push a new "where the cursor is now" range into the storage and
+    /// re-apply marker fading for the whole document. Mutates `backing`
+    /// directly (no edited() call) — selection-driven, not text-driven,
+    /// so there's no edit cycle and the cursor doesn't move.
+    public func setActiveLineRange(_ active: NSRange?) {
+        if activeLineRange == active { return }
+        activeLineRange = active
+        let full = NSRange(location: 0, length: backing.length)
+        guard full.length > 0 else { return }
+        applyHideableMarkerFade(in: full)
+        // Deferred display invalidation — same pattern as processEditing,
+        // for the same reason (calling invalidate methods inside an edit
+        // cycle on iOS asserts; selection updates are outside an edit
+        // cycle but we keep the pattern for consistency).
+        let managers = layoutManagers
+        DispatchQueue.main.async {
+            for manager in managers {
+                manager.invalidateDisplay(forCharacterRange: full)
+            }
+        }
+    }
+
+    /// Walk hideable-marker ranges in `range` and set their foreground to
+    /// either the normal marker color (if intersecting the active line) or
+    /// the faded color (if not). Idempotent.
+    private func applyHideableMarkerFade(in range: NSRange) {
+        let faded = markerColor.withAlphaComponent(0.10)
+        let active = activeLineRange
+        backing.enumerateAttribute(.markdownHideableMarker, in: range, options: []) { value, run, _ in
+            guard value != nil else { return }
+            let color: PlatformColor
+            if let active, NSIntersectionRange(run, active).length > 0 {
+                color = self.markerColor
+            } else if active == nil {
+                // No active selection yet — leave at normal marker color.
+                color = self.markerColor
+            } else {
+                color = faded
+            }
+            backing.addAttribute(.foregroundColor, value: color, range: run)
+        }
+    }
+
     /// Re-styles `backing` directly (no edited() calls). Whoever invokes this
     /// is responsible for posting a single edited() afterward.
     private func restyleBacking(in range: NSRange) {
@@ -163,6 +217,7 @@ public final class MarkdownTextStorage: NSTextStorage {
         backing.removeAttribute(.underlineStyle, range: range)
         backing.removeAttribute(.link, range: range)
         backing.removeAttribute(.markdownCheckboxState, range: range)
+        backing.removeAttribute(.markdownHideableMarker, range: range)
         backing.removeAttribute(.paragraphStyle, range: range)
         backing.setAttributes([
             .font: baseFont,
@@ -172,8 +227,16 @@ public final class MarkdownTextStorage: NSTextStorage {
         let runs = MarkdownSyntax.parse(backing.string)
         for run in runs where run.style != MarkdownStyle() {
             backing.addAttributes(attributes(for: run.style), range: run.range)
+            // Tag inline markers as hideable so the active-line fade pass
+            // can dim them when the cursor isn't on the same paragraph.
+            // List prefixes (`- `, `* `) intentionally aren't tagged —
+            // they're the visible bullet character itself.
+            if run.style.isMarker, run.style.listMarker == nil {
+                backing.addAttribute(.markdownHideableMarker, value: true, range: run.range)
+            }
         }
         markCheckboxSlots(in: range)
+        applyHideableMarkerFade(in: range)
     }
 
     /// Walk lines in `range`; for each line that starts with `- [ ] ` or

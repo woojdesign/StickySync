@@ -133,6 +133,25 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     func textDidChange(_ notification: Notification) {
         note.content = noteView.textView.string
         scheduleSave()
+        // The text view's selection range is implicitly at the end of the
+        // newly-typed character; refresh marker fade so freshly-typed
+        // `**` / `_` etc. stay visible while editing.
+        refreshActiveMarkerRange()
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        refreshActiveMarkerRange()
+    }
+
+    private func refreshActiveMarkerRange() {
+        let selected = noteView.textView.selectedRange()
+        let ns = noteView.textView.string as NSString
+        guard ns.length > 0 else { return }
+        // Active range = the paragraph containing the cursor, expanded to
+        // cover any active selection that crosses paragraph boundaries.
+        let paragraph = ns.paragraphRange(for: NSRange(location: selected.location, length: 0))
+        let active = NSUnionRange(paragraph, selected)
+        noteView.markdownStorage.setActiveLineRange(active)
     }
 
     private func scheduleSave() {

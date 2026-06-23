@@ -30,6 +30,11 @@ public extension NSAttributedString.Key {
     /// Marks a 3-character `[ ]` (or `[x]`) slot for substituted glyph
     /// rendering. Value is a `Bool`: `true` = checked.
     static let markdownCheckboxState = NSAttributedString.Key("markdownCheckboxState")
+    /// Marks an inline-syntax marker that should fade when the cursor isn't
+    /// on the same paragraph. `**`, `_`, `~~`, `#`, and link brackets get
+    /// this tag at parse time. List markers (`- `, `* `) are NOT tagged —
+    /// they're the visual bullet itself, never hidden.
+    static let markdownHideableMarker = NSAttributedString.Key("markdownHideableMarker")
 }
 
 public final class MarkdownLayoutManager: NSLayoutManager {
