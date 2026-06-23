@@ -14,6 +14,24 @@ import AppKit
 
 final class MarkdownNSTextView: NSTextView {
 
+    /// Click on a `[ ]` / `[x]` slot toggles the checkbox without placing
+    /// the cursor inside it. Clicks outside the slot fall through to the
+    /// default selection behavior.
+    override func mouseDown(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        let index = characterIndexForInsertion(at: local)
+        if let storage = textStorage,
+           let hit = MarkdownEditing.checkboxHit(in: storage, at: index) {
+            MarkdownEditing.applyCheckboxToggle(in: storage, hit: hit)
+            // Park the cursor just after the toggled slot so the user can
+            // keep typing on the same line if they want, without it landing
+            // inside the brackets.
+            setSelectedRange(NSRange(location: hit.toggleRange.upperBound + 1, length: 0))
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
     /// Auto-continue list items when the user hits Enter: `- item ⏎` lands
     /// the cursor on the next line already prefixed with `- `. An Enter on
     /// an empty list line cancels the prefix (so you can step out of the

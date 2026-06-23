@@ -238,7 +238,14 @@ public final class MarkdownTextStorage: NSTextStorage {
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
             attrs[.foregroundColor] = textColor
         } else if style.isMarker {
-            attrs[.foregroundColor] = markerColor
+            // Checkbox markers render more prominently than other markers —
+            // the box is an interactive affordance (click-to-toggle), so it
+            // should read as a UI element, not "syntax background noise."
+            if let list = style.listMarker, list != .bullet {
+                attrs[.foregroundColor] = textColor.markerVariant(alpha: 0.65)
+            } else {
+                attrs[.foregroundColor] = markerColor
+            }
         } else {
             attrs[.foregroundColor] = textColor
         }

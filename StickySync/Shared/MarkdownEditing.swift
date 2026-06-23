@@ -75,6 +75,56 @@ public enum MarkdownEditing {
         return line.substring(with: NSRange(location: 0, length: 2)) as NSString
     }
 
+    // MARK: - Checkbox hit-testing
+
+    /// Result of hit-testing a click/tap against a checkbox slot.
+    public struct CheckboxHit: Equatable {
+        /// The 3-character range covering the `[ ]` or `[x]` literal that
+        /// should be replaced when the toggle is applied.
+        public let toggleRange: NSRange
+        /// Current state of the checkbox under the pointer.
+        public let isChecked: Bool
+    }
+
+    /// Returns checkbox hit-test info if `index` falls within the literal
+    /// `[ ]` / `[x]` slot of a checkbox list line. Otherwise nil.
+    ///
+    /// The hit zone is intentionally narrow — just the 3 characters of the
+    /// `[ ]` itself, NOT the leading `- ` dash or the trailing space. That
+    /// keeps the rest of the prefix area available for normal cursor
+    /// placement; only direct hits on the box flip the state.
+    public static func checkboxHit(in storage: NSAttributedString, at index: Int) -> CheckboxHit? {
+        let ns = storage.string as NSString
+        guard index >= 0, index <= ns.length else { return nil }
+        let lineRange = ns.lineRange(for: NSRange(location: index, length: 0))
+        guard lineRange.length >= 6 else { return nil }
+        let first = ns.character(at: lineRange.location)
+        guard first == 0x2D || first == 0x2A else { return nil }
+        guard ns.character(at: lineRange.location + 1) == 0x20 else { return nil }
+        guard ns.character(at: lineRange.location + 2) == 0x5B /* [ */ else { return nil }
+        let state = ns.character(at: lineRange.location + 3)
+        guard state == 0x20 || state == 0x78 || state == 0x58 else { return nil }
+        guard ns.character(at: lineRange.location + 4) == 0x5D /* ] */ else { return nil }
+        guard ns.character(at: lineRange.location + 5) == 0x20 else { return nil }
+
+        // Hit only when the index landed on the `[`, the inner state char, or the `]`.
+        let hitStart = lineRange.location + 2
+        let hitEnd = lineRange.location + 5  // exclusive
+        guard index >= hitStart, index < hitEnd else { return nil }
+
+        return CheckboxHit(
+            toggleRange: NSRange(location: hitStart, length: 3),
+            isChecked: state == 0x78 || state == 0x58
+        )
+    }
+
+    /// Flip the checkbox at `hit` (unchecked → checked or vice-versa).
+    public static func applyCheckboxToggle(in storage: NSMutableAttributedString,
+                                           hit: CheckboxHit) {
+        let replacement = hit.isChecked ? "[ ]" : "[x]"
+        storage.replaceCharacters(in: hit.toggleRange, with: replacement)
+    }
+
     /// Continuation prefix: a checked item rolls forward as unchecked, so
     /// you don't accidentally mark a brand-new line as already-done.
     private static func continuationPrefix(for prefix: String) -> String {

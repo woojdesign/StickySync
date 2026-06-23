@@ -140,8 +140,37 @@ struct MarkdownTextView: UIViewRepresentable {
     }
 }
 
-/// UITextView subclass that surfaces ⌘B/⌘I/⌘⇧X/⌘K to hardware keyboards.
+/// UITextView subclass that surfaces ⌘B/⌘I/⌘⇧X/⌘K to hardware keyboards and
+/// adds a tap recognizer that toggles checkbox state when the user taps a
+/// `[ ]` / `[x]` slot directly.
 final class MarkdownUITextView: UITextView {
+
+    private lazy var checkboxTap: UITapGestureRecognizer = {
+        let g = UITapGestureRecognizer(target: self, action: #selector(handleCheckboxTap(_:)))
+        g.cancelsTouchesInView = false  // let UITextView's own recognizers run too
+        g.delegate = self
+        return g
+    }()
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        addGestureRecognizer(checkboxTap)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        addGestureRecognizer(checkboxTap)
+    }
+
+    @objc private func handleCheckboxTap(_ g: UITapGestureRecognizer) {
+        let point = g.location(in: self)
+        guard let position = closestPosition(to: point),
+              let storage = textStorage as? MarkdownTextStorage else { return }
+        let index = offset(from: beginningOfDocument, to: position)
+        guard let hit = MarkdownEditing.checkboxHit(in: storage, at: index) else { return }
+        MarkdownEditing.applyCheckboxToggle(in: storage, hit: hit)
+    }
+
     override var keyCommands: [UIKeyCommand]? {
         [
             UIKeyCommand(action: #selector(mdBold), input: "b", modifierFlags: .command, discoverabilityTitle: "Bold"),
@@ -169,5 +198,14 @@ final class MarkdownUITextView: UITextView {
     @objc private func mdLink() {
         guard let st = textStorage as? MarkdownTextStorage else { return }
         selectedRange = MarkdownEditing.insertLink(in: st, range: selectedRange)
+    }
+}
+
+extension MarkdownUITextView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        // Coexist with UITextView's built-in selection/cursor recognizers so
+        // our checkbox tap runs without blocking normal interaction.
+        return true
     }
 }
