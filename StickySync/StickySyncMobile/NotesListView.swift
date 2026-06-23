@@ -36,7 +36,7 @@ struct NotesListView: View {
                     } else {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(filtered) { note in
-                                NoteCard(note: note)
+                                NoteCard(note: note, isShared: model.sharedNoteIDs.contains(note.id))
                                     .onTapGesture { editing = note }
                                     .contextMenu {
                                         Button { UIPasteboard.general.string = note.content } label: {
@@ -192,6 +192,7 @@ private struct SearchField: View {
 
 private struct NoteCard: View {
     let note: Note
+    var isShared: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: WoojSpace.md) {
@@ -203,15 +204,28 @@ private struct NoteCard: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             Spacer(minLength: WoojSpace.xs)
-            Text(Self.relativeTime(note.modifiedAt))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(WoojColor.muted)
+            HStack(spacing: WoojSpace.xs) {
+                Text(Self.relativeTime(note.modifiedAt))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(WoojColor.muted)
+                Spacer()
+                if isShared {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(WoojColor.clay)
+                        .accessibilityLabel("Shared note")
+                }
+            }
         }
         .frame(minHeight: 120, alignment: .topLeading)
         .padding(WoojSpace.md)
         .background(
             Appearance.background(note.colorToken),
             in: RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous)
+                .strokeBorder(WoojColor.clay.opacity(0.35), lineWidth: isShared ? 1 : 0)
         )
         .shadow(color: WoojColor.ink.opacity(0.07), radius: 10, y: 5)
     }

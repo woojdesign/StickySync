@@ -8,6 +8,10 @@ import NotesKit
 @MainActor
 final class NotesModel: ObservableObject {
     @Published private(set) var notes: [Note] = []
+    /// IDs of notes that are currently shared (either outgoing shares from
+    /// this user or incoming shares accepted from someone else). Recomputed
+    /// on every reload by asking the store. Empty for the JSON store.
+    @Published private(set) var sharedNoteIDs: Set<UUID> = []
     private let store: NoteStore
 
     /// The one shared store, exposed so the capture surface writes through the
@@ -26,6 +30,14 @@ final class NotesModel: ObservableObject {
         // allNotes() already excludes soft-deleted tombstones, newest sorting
         // handled below so freshly-edited notes float to the top.
         notes = store.allNotes().sorted { $0.modifiedAt > $1.modifiedAt }
+        sharedNoteIDs = Self.computeSharedNoteIDs(in: notes, store: store)
+    }
+
+    private static func computeSharedNoteIDs(in notes: [Note], store: NoteStore) -> Set<UUID> {
+        guard let ck = store as? CloudKitNoteStore else { return [] }
+        var ids: Set<UUID> = []
+        for n in notes where ck.isShared(n) { ids.insert(n.id) }
+        return ids
     }
 
     @discardableResult
