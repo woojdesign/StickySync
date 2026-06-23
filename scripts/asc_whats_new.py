@@ -32,6 +32,33 @@ WHATS_NEW_LIMIT = 4000
 PROCESS_TIMEOUT_S = 30 * 60
 POLL_S = 30
 
+# App Store Connect's `whatsNew` field rejects a handful of Unicode characters
+# with `ENTITY_ERROR.ATTRIBUTE.INVALID.INVALID_TEXT`. Apple doesn't publish the
+# full list, so this map grows by trial and error. Each entry replaces a known-
+# rejected character with a safe ASCII equivalent that reads naturally.
+WHATS_NEW_REPLACEMENTS = {
+    "☐": "[ ]",   # ☐  ballot box           (rejected 2026-06-23)
+    "☑": "[x]",   # ☑  ballot box with check (rejected 2026-06-23)
+    "☒": "[x]",   # ☒  ballot box with X
+    "✓": "v",     # ✓  check mark
+    "✔": "v",     # ✔  heavy check mark
+    "✗": "x",     # ✗  ballot X
+    "✘": "x",     # ✘  heavy ballot X
+}
+
+
+def sanitize_whats_new(text: str) -> str:
+    """Replace characters known to be rejected by ASC's whatsNew validator."""
+    out = text
+    replaced: list[str] = []
+    for src, dst in WHATS_NEW_REPLACEMENTS.items():
+        if src in out:
+            out = out.replace(src, dst)
+            replaced.append(src)
+    if replaced:
+        print(f"   sanitized whatsNew: replaced {replaced}")
+    return out
+
 
 def _required_env(name: str) -> str:
     v = os.environ.get(name)
@@ -130,6 +157,7 @@ def main() -> None:
     args = ap.parse_args()
 
     notes = Path(args.notes_file).read_text().strip()
+    notes = sanitize_whats_new(notes)
     if len(notes) > WHATS_NEW_LIMIT:
         print(f"warn: notes are {len(notes)} chars, truncating to {WHATS_NEW_LIMIT}")
         notes = notes[:WHATS_NEW_LIMIT]

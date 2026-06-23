@@ -75,13 +75,19 @@ esac
 
 PROMPT="You are writing release notes for StickySync $VERSION. Below is the list of git commits since the last release. Rewrite them as a concise, user-facing changelog.
 
-Rules:
+Hard rules:
 - ${PLATFORM_RULE}
-- One bullet per user-visible change. Drop pure-internal commits (refactors, gitignore, CI, build-only changes) unless they meaningfully affect the user.
+- ONE bullet per user-visible change. Drop pure-internal commits (refactors, gitignore, CI, build-only changes, release-script work) unless they meaningfully affect the user.
 - Past tense, neutral voice. Example: 'Added a Share button on the note strip.'
 - Commit messages may be prefixed with 'Mac:', 'iOS:', 'Capture:' — use those as platform hints, then strip the prefix from the user-facing bullet.
-- No preamble, no closing remarks. Start the output with the first bullet (or first heading). Markdown only.
+- Every bullet you write MUST be directly traceable to one or more commit messages below. Do NOT invent or recall features from prior releases — the changelog covers ONLY the commits in this range.
 - Keep the whole output under 3500 characters (TestFlight limit is 4000).
+
+OUTPUT FORMAT — strictly enforced:
+- The entire response is a Markdown bulleted list (or the heading-grouped variant if --platform all). Nothing else.
+- No preamble (e.g. 'Here are the release notes', 'Wrote the changelog to…').
+- No closing remarks, no 'Notes on what I dropped', no explanations of your reasoning, no parenthetical commentary about which commits you merged or excluded.
+- The very first character of your output should be either '-' (a bullet) or '#' (a heading). The last character should be the end of the last bullet's text.
 
 Commits:
 $COMMITS"
