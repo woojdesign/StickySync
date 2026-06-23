@@ -1,4 +1,5 @@
 import AppKit
+import CloudKit
 import NotesKit
 #if canImport(Sparkle)
 import Sparkle
@@ -226,5 +227,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
+    }
+
+    // MARK: - CloudKit Sharing — accept incoming invitations
+
+    /// AppKit fires this when the user taps a CKShare URL (from iMessage,
+    /// Mail, AirDrop, etc.) and StickySync is the registered owner of the
+    /// container. Forward to the store so the new shared note lands in the
+    /// `.shared` persistent store.
+    func application(_ application: NSApplication,
+                     userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        guard let ckStore = store as? CloudKitNoteStore else {
+            NSLog("StickySync: accept-share fired but store isn't CloudKitNoteStore")
+            return
+        }
+        Task {
+            do {
+                try await ckStore.acceptShareInvitation(metadata: metadata)
+            } catch {
+                NSLog("StickySync: accept share failed: \(error)")
+            }
+        }
     }
 }

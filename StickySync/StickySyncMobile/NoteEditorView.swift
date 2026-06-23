@@ -14,6 +14,7 @@ struct NoteEditorView: View {
     @State private var saveTask: Task<Void, Never>?
     @State private var landed = false
     @State private var focused: Bool = false
+    @State private var showShareSheet = false
 
     init(note: Note) {
         _note = State(initialValue: note)
@@ -42,6 +43,12 @@ struct NoteEditorView: View {
         .onAppear { withAnimation(WoojMotion.settle.animation) { landed = true } }
         .onChange(of: note.content) { _ in scheduleSave() }
         .onDisappear { saveNow() }
+        .sheet(isPresented: $showShareSheet) {
+            CloudShareSheet(note: note) { _ in
+                // Refresh so the shared-state indicator updates on the list.
+                model.reload()
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -67,6 +74,9 @@ struct NoteEditorView: View {
                         .foregroundStyle(WoojColor.clay)
                 }
                 Menu {
+                    Button { showShareSheet = true } label: {
+                        Label("Share with someone…", systemImage: "person.badge.plus")
+                    }
                     Button { UIPasteboard.general.string = note.content } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
