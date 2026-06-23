@@ -53,7 +53,7 @@ final class NoteContentView: NSView {
             textColor: .labelColor,
             markerColor: NSColor.labelColor.markerVariant()
         )
-        let layoutManager = NSLayoutManager()
+        let layoutManager = MarkdownLayoutManager()
         storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true

@@ -28,7 +28,7 @@ struct MarkdownTextView: UIViewRepresentable {
             textColor: textColor,
             markerColor: textColor.markerVariant()
         )
-        let layoutManager = NSLayoutManager()
+        let layoutManager = MarkdownLayoutManager()
         storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
