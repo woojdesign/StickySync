@@ -1,10 +1,11 @@
 import AppKit
+import CloudKit
 import NotesKit
 
 /// Owns one note's window and mediates between the view and the store.
 /// Everything it persists goes through the `NoteStore` protocol, so the
 /// CloudKit swap later doesn't touch this file.
-final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate {
+final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate, NSSharingServicePickerDelegate {
     private(set) var note: Note
     private let store: NoteStore
     let window: NoteWindow
@@ -64,11 +65,13 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         noteView.onFont = { [weak self] in self?.showFontPopover() }
         noteView.onClose = { [weak self] in self?.requestClose() }
         noteView.onToggleCollapse = { [weak self] in self?.toggleCollapse() }
+        noteView.onShareWithPeople = { [weak self] in self?.shareWithPeople() }
         noteView.onHoverChange = { [weak self] hovering in
             self?.noteView.setChromeVisible(hovering, animated: true)
         }
 
         applyAppearance()
+        refreshShareIndicator()
         noteView.scrollView.isHidden = note.collapsed
     }
 
@@ -145,6 +148,48 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     private func saveNow() {
         saveWorkItem?.cancel()
         store.update(note)
+    }
+
+    // MARK: - Sharing
+
+    /// Update the share button's icon based on the current share state.
+    /// Cheap synchronous call — `fetchShares(matching:)` is cached metadata.
+    private func refreshShareIndicator() {
+        guard let ckStore = store as? CloudKitNoteStore else {
+            noteView.isShared = false
+            return
+        }
+        noteView.isShared = ckStore.isShared(note)
+    }
+
+    /// "Share with someone…" — owner creates a CKShare (or fetches the
+    /// existing one) and we hand it to NSSharingServicePicker, which
+    /// presents Apple's stock recipient picker / participant management
+    /// UI. The picker handles adding people, changing permissions, and
+    /// "Stop Sharing"; we just refresh the indicator afterward.
+    private func shareWithPeople() {
+        guard let ckStore = store as? CloudKitNoteStore else { return }
+        Task { @MainActor in
+            do {
+                let (share, container) = try await ckStore.share(note)
+                // The share now exists — flip the indicator immediately so
+                // the user gets visual feedback even before the picker UI is
+                // fully on screen.
+                self.refreshShareIndicator()
+                self.presentCloudSharingPicker(share: share, container: container)
+            } catch {
+                NSLog("StickySync: share creation failed: \(error)")
+            }
+        }
+    }
+
+    @MainActor
+    private func presentCloudSharingPicker(share: CKShare, container: CKContainer) {
+        let picker = NSSharingServicePicker(items: [share, container])
+        picker.delegate = self
+        picker.show(relativeTo: noteView.shareButton.bounds,
+                    of: noteView.shareButton,
+                    preferredEdge: .minY)
     }
 
     // MARK: - Color / font popovers
