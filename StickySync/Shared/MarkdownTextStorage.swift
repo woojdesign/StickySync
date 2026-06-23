@@ -103,15 +103,15 @@ public final class MarkdownTextStorage: NSTextStorage {
         // Two rules we have to honor inside processEditing:
         //   1. Never call self.setAttributes / self.addAttributes here —
         //      they wrap in beginEditing/endEditing, which Apple's docs
-        //      forbid during a process cycle (nesting confuses the text
-        //      view's selection management). We mutate `backing` directly.
-        //   2. Never widen the `edited(.editedAttributes, range:)`
-        //      notification beyond the lines actually touched by this edit
-        //      — declaring the whole document changed caused NSTextView to
-        //      reset its insertion point to end-of-text on every keystroke.
-        // All of our supported syntax (bold/italic/strike/heading/list) is
-        // single-line, so restyling the lines containing the user's edit
-        // is sufficient and correct.
+        //      forbid during a process cycle. We mutate `backing` directly.
+        //   2. Never call edited(.editedAttributes, range:) from in here
+        //      with a wider range than what the user touched. The system
+        //      MERGES it with the user's character edit into a single
+        //      notification, and NSTextView's selection-adjustment then
+        //      pushes the insertion point to the end of that widened range
+        //      (which manifested as the cursor jumping per keystroke).
+        //      Instead, ask the layout manager to re-render without going
+        //      through the edit-notification path.
         let ns = backing.string as NSString
         guard ns.length > 0 else {
             super.processEditing()
@@ -119,8 +119,15 @@ public final class MarkdownTextStorage: NSTextStorage {
         }
         let touched = ns.lineRange(for: editedRange)
         restyleBacking(in: touched)
-        edited(.editedAttributes, range: touched, changeInLength: 0)
         super.processEditing()
+        for manager in layoutManagers {
+            var actual = NSRange(location: NSNotFound, length: 0)
+            manager.invalidateGlyphs(forCharacterRange: touched,
+                                     changeInLength: 0,
+                                     actualCharacterRange: &actual)
+            manager.invalidateLayout(forCharacterRange: touched, actualCharacterRange: &actual)
+            manager.invalidateDisplay(forCharacterRange: touched)
+        }
     }
 
     /// Restyles when something other than the text changed — base font, base
@@ -152,7 +159,9 @@ public final class MarkdownTextStorage: NSTextStorage {
         for run in runs where run.style != MarkdownStyle() {
             backing.addAttributes(attributes(for: run.style), range: run.range)
         }
-        applyListParagraphStyles(in: range)
+        // List paragraph styling deferred — was confusing the layout manager,
+        // causing the cursor to skip after each keystroke. Will re-add via
+        // typing-attribute path in 0.4.1.
     }
 
     /// For lines that begin with a list marker, give the paragraph a hanging
