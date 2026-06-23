@@ -44,6 +44,11 @@
 			path = StickySyncMobile;
 			sourceTree = "<group>";
 		};
+		A7BABE012FF000010000F00D /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +80,7 @@
 			children = (
 				A700523F2FE5C55D0081736C /* StickySync */,
 				A71D71622FE83172008D48F6 /* StickySyncMobile */,
+				A7BABE012FF000010000F00D /* Shared */,
 				A71D71792FE833D7008D48F6 /* Frameworks */,
 				A700523E2FE5C55D0081736C /* Products */,
 			);
@@ -113,6 +119,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A700523F2FE5C55D0081736C /* StickySync */,
+				A7BABE012FF000010000F00D /* Shared */,
 			);
 			name = StickySync;
 			packageProductDependencies = (
@@ -138,6 +145,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A71D71622FE83172008D48F6 /* StickySyncMobile */,
+				A7BABE012FF000010000F00D /* Shared */,
 			);
 			name = StickySyncMobile;
 			packageProductDependencies = (

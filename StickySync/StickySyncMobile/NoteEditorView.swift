@@ -13,7 +13,7 @@ struct NoteEditorView: View {
     @State private var note: Note
     @State private var saveTask: Task<Void, Never>?
     @State private var landed = false
-    @FocusState private var focused: Bool
+    @State private var focused: Bool = false
 
     init(note: Note) {
         _note = State(initialValue: note)
@@ -25,15 +25,15 @@ struct NoteEditorView: View {
 
             VStack(spacing: 0) {
                 topBar
-                TextEditor(text: $note.content)
-                    .font(Appearance.font(note.fontName, size: CGFloat(note.fontSize)))
-                    .foregroundStyle(WoojColor.reading)
-                    .lineSpacing(7)
-                    .tint(WoojColor.clay)
-                    .scrollContentBackground(.hidden)
-                    .focused($focused)
-                    .padding(.horizontal, WoojSpace.lg)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                MarkdownTextView(
+                    text: $note.content,
+                    isFocused: $focused,
+                    font: Appearance.uiFont(note.fontName, size: CGFloat(note.fontSize)),
+                    textColor: UIColor(WoojColor.reading),
+                    tintColor: UIColor(WoojColor.clay)
+                )
+                .padding(.horizontal, WoojSpace.lg)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .safeAreaInset(edge: .bottom) { paletteDock }

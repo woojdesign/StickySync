@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import NotesKit
 import WoojTokens
 
@@ -22,6 +23,26 @@ enum Appearance {
         case .serif:           return .custom(WoojType.reading.family, size: size)  // Charter (wooj reading)
         case .monospaced:      return .system(size: size, design: .monospaced)
         case .named(let name): return .custom(name, size: size)
+        }
+    }
+
+    /// UIFont equivalent for use with UIKit-backed editors (Markdown wrapper).
+    static func uiFont(_ id: String, size: CGFloat) -> UIFont {
+        switch FontCatalog.option(for: id).kind {
+        case .system:
+            return .systemFont(ofSize: size)
+        case .rounded:
+            let base = UIFont.systemFont(ofSize: size)
+            if let d = base.fontDescriptor.withDesign(.rounded) {
+                return UIFont(descriptor: d, size: size)
+            }
+            return base
+        case .serif:
+            return UIFont(name: WoojType.reading.family, size: size) ?? .systemFont(ofSize: size)
+        case .monospaced:
+            return .monospacedSystemFont(ofSize: size, weight: .regular)
+        case .named(let name):
+            return UIFont(name: name, size: size) ?? .systemFont(ofSize: size)
         }
     }
 }

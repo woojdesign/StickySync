@@ -31,7 +31,8 @@ final class NoteContentView: NSView {
     let fontButton = NSButton()
     let closeButton = NSButton()
     let scrollView = NSScrollView()
-    let textView = NSTextView()
+    let textView: MarkdownNSTextView
+    let markdownStorage: MarkdownTextStorage
 
     var onColor: (() -> Void)?
     var onFont: (() -> Void)?
@@ -44,6 +45,22 @@ final class NoteContentView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override init(frame frameRect: NSRect) {
+        // Build a Markdown-aware text view: the storage subclass restyles
+        // bold / italic / strike / headings / lists / links on every edit
+        // while the underlying string stays plain Markdown.
+        let storage = MarkdownTextStorage(
+            baseFont: NSFont.systemFont(ofSize: 14),
+            textColor: .labelColor,
+            markerColor: NSColor.labelColor.markerVariant()
+        )
+        let layoutManager = NSLayoutManager()
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layoutManager.addTextContainer(container)
+        self.markdownStorage = storage
+        self.textView = MarkdownNSTextView(frame: .zero, textContainer: container)
+
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.cornerRadius = 14
@@ -122,14 +139,12 @@ final class NoteContentView: NSView {
         needsDisplay = true
 
         let textColor = Appearance.text(for: colorToken)
-        textView.textColor = textColor
         textView.insertionPointColor = textColor
-        if let ts = textView.textStorage, ts.length > 0 {
-            let range = NSRange(location: 0, length: ts.length)
-            ts.addAttribute(.foregroundColor, value: textColor, range: range)
-            ts.addAttribute(.font, value: font, range: range)
-        }
-        textView.font = font
+        // The text storage redraws on its own when these properties change,
+        // applying baseFont/textColor across all existing Markdown spans.
+        markdownStorage.baseFont = font
+        markdownStorage.textColor = textColor
+        markdownStorage.markerColor = textColor.markerVariant()
         textView.typingAttributes = [.foregroundColor: textColor, .font: font]
 
         let tint = textColor.withAlphaComponent(0.85)
