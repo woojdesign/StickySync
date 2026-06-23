@@ -120,13 +120,26 @@ public final class MarkdownTextStorage: NSTextStorage {
         let touched = ns.lineRange(for: editedRange)
         restyleBacking(in: touched)
         super.processEditing()
-        for manager in layoutManagers {
-            var actual = NSRange(location: NSNotFound, length: 0)
-            manager.invalidateGlyphs(forCharacterRange: touched,
-                                     changeInLength: 0,
-                                     actualCharacterRange: &actual)
-            manager.invalidateLayout(forCharacterRange: touched, actualCharacterRange: &actual)
-            manager.invalidateDisplay(forCharacterRange: touched)
+        // Defer invalidation to the next runloop. Calling invalidateDisplay
+        // / invalidateGlyphs from inside processEditing triggers glyph
+        // generation while the textStorage is still considered editing
+        // (endEditing is what called us), which iOS's NSLayoutManager
+        // asserts against: "attempted glyph generation while textStorage is
+        // editing." Mac's NSTextView tolerates it; UITextView in iOS 26
+        // does not. Deferring by one runloop is invisible at typing speed
+        // (the user's edited character renders via the system's own
+        // edit-notification path; only the surrounding line's styling
+        // catches up a frame later).
+        let managers = layoutManagers
+        DispatchQueue.main.async {
+            for manager in managers {
+                var actual = NSRange(location: NSNotFound, length: 0)
+                manager.invalidateGlyphs(forCharacterRange: touched,
+                                         changeInLength: 0,
+                                         actualCharacterRange: &actual)
+                manager.invalidateLayout(forCharacterRange: touched, actualCharacterRange: &actual)
+                manager.invalidateDisplay(forCharacterRange: touched)
+            }
         }
     }
 
