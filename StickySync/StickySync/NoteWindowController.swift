@@ -185,7 +185,13 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     @MainActor
     private func presentCloudSharingPicker(share: CKShare, container: CKContainer) {
-        let picker = NSSharingServicePicker(items: [share, container])
+        // The documented Mac path is an NSItemProvider that registers the
+        // share + container — passing raw [CKShare, CKContainer] as picker
+        // items doesn't surface the collaboration UI (the share is created
+        // in the back-end, but the picker presents nothing visible).
+        let provider = NSItemProvider()
+        provider.registerCKShare(share, container: container, allowedSharingOptions: .standard)
+        let picker = NSSharingServicePicker(items: [provider])
         picker.delegate = self
         picker.show(relativeTo: noteView.shareButton.bounds,
                     of: noteView.shareButton,

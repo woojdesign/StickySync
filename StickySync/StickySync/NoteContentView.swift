@@ -140,49 +140,18 @@ final class NoteContentView: NSView {
     @objc private func fontTapped() { onFont?() }
     @objc private func closeTapped() { onClose?() }
 
-    /// Tap the share button:
-    ///   • Note is shared → straight to participant-management picker
-    ///     (onShareWithPeople creates / fetches the CKShare and presents).
-    ///   • Note is private and has text → small menu offering
-    ///     "Share with someone…" (CKShare) or "Share text…" (plain text).
-    ///   • Note is private and empty → no-op (nothing to share yet).
+    /// Tap the share button → CloudKit share + participant-management UI.
+    /// (Same action whether the note is already shared or not — the picker
+    /// either creates a new share or shows existing participants.)
+    /// Text-only sharing isn't bound to this button — users can select text
+    /// and right-click for the system Services menu if they want that.
     @objc private func shareTapped() {
-        if isShared {
-            onShareWithPeople?()
-            return
-        }
         let text = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty {
-            // Empty notes can't be shared either way.
+        if !isShared && text.isEmpty {
+            // Empty unshared notes have nothing to share.
             return
         }
-        let menu = NSMenu()
-        menu.addItem(menuItem(title: "Share with someone…",
-                              action: #selector(shareWithPeopleSelected),
-                              symbol: "person.badge.plus"))
-        menu.addItem(menuItem(title: "Share text…",
-                              action: #selector(shareTextSelected),
-                              symbol: "text.bubble"))
-        let origin = NSPoint(x: 0, y: shareButton.bounds.height + 4)
-        menu.popUp(positioning: nil, at: origin, in: shareButton)
-    }
-
-    @objc private func shareWithPeopleSelected() {
         onShareWithPeople?()
-    }
-
-    @objc private func shareTextSelected() {
-        let text = textView.string
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        NSSharingServicePicker(items: [text]).show(relativeTo: shareButton.bounds,
-                                                   of: shareButton, preferredEdge: .minY)
-    }
-
-    private func menuItem(title: String, action: Selector, symbol: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        return item
     }
 
     private func updateShareButtonAppearance() {
