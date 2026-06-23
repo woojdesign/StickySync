@@ -140,18 +140,58 @@ final class NoteContentView: NSView {
     @objc private func fontTapped() { onFont?() }
     @objc private func closeTapped() { onClose?() }
 
-    /// Tap the share button → CloudKit share + participant-management UI.
-    /// (Same action whether the note is already shared or not — the picker
-    /// either creates a new share or shows existing participants.)
-    /// Text-only sharing isn't bound to this button — users can select text
-    /// and right-click for the system Services menu if they want that.
+    /// Tap the share button:
+    ///   • Already shared → straight to participant-management picker
+    ///     (onShareWithPeople fetches the existing CKShare and presents).
+    ///   • Otherwise → small menu offering "Share with someone…" (CKShare)
+    ///     or "Share text…" (plain text via the system share sheet).
+    ///   • Empty unshared note → no-op.
     @objc private func shareTapped() {
-        let text = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !isShared && text.isEmpty {
-            // Empty unshared notes have nothing to share.
+        if isShared {
+            onShareWithPeople?()
             return
         }
+        let text = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return }
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let collab = NSMenuItem(title: "Share with someone…",
+                                action: #selector(shareWithPeopleSelected),
+                                keyEquivalent: "")
+        collab.target = self
+        collab.image = NSImage(systemSymbolName: "person.badge.plus", accessibilityDescription: nil)
+        menu.addItem(collab)
+
+        let textShare = NSMenuItem(title: "Share text…",
+                                   action: #selector(shareTextSelected),
+                                   keyEquivalent: "")
+        textShare.target = self
+        textShare.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
+        menu.addItem(textShare)
+
+        // Anchor the menu in screen coordinates so AppKit positions it
+        // reliably below the button regardless of the host view's flipped
+        // state. (The earlier view-local origin landed off-screen above
+        // the title bar on non-flipped NoteContentView.)
+        guard let window = shareButton.window else { return }
+        let inWindow = shareButton.convert(shareButton.bounds, to: nil)
+        let inScreen = window.convertToScreen(inWindow)
+        // Menu's top-left ↔ button's bottom-left, in screen coords (y up).
+        let menuOrigin = NSPoint(x: inScreen.minX, y: inScreen.minY)
+        menu.popUp(positioning: nil, at: menuOrigin, in: nil)
+    }
+
+    @objc private func shareWithPeopleSelected() {
         onShareWithPeople?()
+    }
+
+    @objc private func shareTextSelected() {
+        let text = textView.string
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        NSSharingServicePicker(items: [text]).show(relativeTo: shareButton.bounds,
+                                                   of: shareButton, preferredEdge: .minY)
     }
 
     private func updateShareButtonAppearance() {
