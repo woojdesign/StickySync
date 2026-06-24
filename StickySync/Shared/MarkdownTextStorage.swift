@@ -188,26 +188,48 @@ public final class MarkdownTextStorage: NSTextStorage {
         }
     }
 
-    /// Walk hideable-marker ranges in `range` and set their foreground to
-    /// either the normal marker color (if intersecting the active line) or
-    /// the faded color (if not). Idempotent.
+    /// Walk hideable-marker ranges in `range`. For each one:
+    ///   • inside the active paragraph → normal marker color, base font
+    ///     (fully visible, normal width).
+    ///   • outside the active paragraph → clear color + ~0pt font (truly
+    ///     hidden, ~0 width — the layout reflows so the word reads as if
+    ///     the marker isn't there).
+    /// `activeLineRange == nil` (no selection seen yet) keeps all markers
+    /// at their normal style so the user isn't surprised by hidden syntax
+    /// on the very first render.
     private func applyHideableMarkerFade(in range: NSRange) {
-        let faded = markerColor.withAlphaComponent(0.10)
         let active = activeLineRange
+        let hiddenFont = Self.hiddenFont
+        let clear = PlatformColor.clear
         backing.enumerateAttribute(.markdownHideableMarker, in: range, options: []) { value, run, _ in
             guard value != nil else { return }
-            let color: PlatformColor
-            if let active, NSIntersectionRange(run, active).length > 0 {
-                color = self.markerColor
-            } else if active == nil {
-                // No active selection yet — leave at normal marker color.
-                color = self.markerColor
+            let visible: Bool
+            if let active {
+                visible = NSIntersectionRange(run, active).length > 0
             } else {
-                color = faded
+                visible = true
             }
-            backing.addAttribute(.foregroundColor, value: color, range: run)
+            if visible {
+                backing.addAttribute(.foregroundColor, value: self.markerColor, range: run)
+                backing.addAttribute(.font, value: self.baseFont, range: run)
+            } else {
+                backing.addAttribute(.foregroundColor, value: clear, range: run)
+                backing.addAttribute(.font, value: hiddenFont, range: run)
+            }
         }
     }
+
+    /// A near-zero-point font shared across all hidden markers. 0.01pt
+    /// gives an advance width of effectively zero — the markers occupy no
+    /// visible space when hidden. (0pt is invalid; 0.01 is the canonical
+    /// "as close to invisible as possible" value.)
+    private static let hiddenFont: PlatformFont = {
+        #if canImport(AppKit)
+        return NSFont.systemFont(ofSize: 0.01)
+        #else
+        return UIFont.systemFont(ofSize: 0.01)
+        #endif
+    }()
 
     /// Re-styles `backing` directly (no edited() calls). Whoever invokes this
     /// is responsible for posting a single edited() afterward.

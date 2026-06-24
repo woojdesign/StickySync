@@ -100,6 +100,14 @@ struct MarkdownTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            // Expand `[]` / `[ ]` at line start into the canonical
+            // `- [ ] ` before syncing the SwiftUI binding. Keeps the
+            // underlying file format portable Markdown.
+            if let exp = MarkdownEditing.checkboxAutoExpansion(in: textView.textStorage,
+                                                               at: textView.selectedRange.location) {
+                MarkdownEditing.applyCheckboxAutoExpansion(exp, in: textView.textStorage)
+                textView.selectedRange = NSRange(location: exp.newCursor, length: 0)
+            }
             // The storage is the source of truth for the underlying plain
             // text; SwiftUI binding receives only the raw string.
             let s = textView.text ?? ""

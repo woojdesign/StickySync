@@ -131,6 +131,16 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     // MARK: - Editing
 
     func textDidChange(_ notification: Notification) {
+        // Expand `[]` / `[ ]` at line start into the canonical `- [ ] `
+        // before reading the string out — keeps the underlying file format
+        // portable Markdown without making the user type the heavier form.
+        if let storage = noteView.textView.textStorage {
+            let cursor = noteView.textView.selectedRange().location
+            if let exp = MarkdownEditing.checkboxAutoExpansion(in: storage, at: cursor) {
+                MarkdownEditing.applyCheckboxAutoExpansion(exp, in: storage)
+                noteView.textView.setSelectedRange(NSRange(location: exp.newCursor, length: 0))
+            }
+        }
         note.content = noteView.textView.string
         scheduleSave()
         // The text view's selection range is implicitly at the end of the

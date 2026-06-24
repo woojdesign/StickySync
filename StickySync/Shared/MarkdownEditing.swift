@@ -75,6 +75,64 @@ public enum MarkdownEditing {
         return line.substring(with: NSRange(location: 0, length: 2)) as NSString
     }
 
+    // MARK: - Checkbox auto-expansion (`[]` → `- [ ] `)
+
+    public struct CheckboxAutoExpansion: Equatable {
+        public let replaceRange: NSRange
+        public let replacementText: String
+        public let newCursor: Int
+    }
+
+    /// Detect the lightweight checkbox shortcut: when the user just typed
+    /// `]` and the current line contains nothing but `[]` (or `[ ]`), expand
+    /// it to the canonical `- [ ] ` so the underlying file format stays as
+    /// portable Markdown.
+    ///
+    /// `cursor` is the insertion point AFTER the user's `]` was inserted —
+    /// i.e. the value of `selectedRange.location` when the change observer
+    /// fires. Returns nil when there's nothing to expand.
+    public static func checkboxAutoExpansion(in storage: NSAttributedString,
+                                             at cursor: Int) -> CheckboxAutoExpansion? {
+        let ns = storage.string as NSString
+        guard cursor >= 1, cursor <= ns.length else { return nil }
+        // Only trigger right after a `]` character.
+        guard ns.character(at: cursor - 1) == 0x5D else { return nil }
+
+        let lineRange = ns.lineRange(for: NSRange(location: cursor - 1, length: 0))
+        var contentLen = lineRange.length
+        if contentLen > 0,
+           ns.character(at: lineRange.location + contentLen - 1) == 0x0A {
+            contentLen -= 1
+        }
+        let lineContent = ns.substring(with: NSRange(location: lineRange.location, length: contentLen))
+
+        let canonical = "- [ ] "
+        let canonicalLen = (canonical as NSString).length
+        switch lineContent {
+        case "[]":
+            return CheckboxAutoExpansion(
+                replaceRange: NSRange(location: lineRange.location, length: 2),
+                replacementText: canonical,
+                newCursor: lineRange.location + canonicalLen
+            )
+        case "[ ]":
+            return CheckboxAutoExpansion(
+                replaceRange: NSRange(location: lineRange.location, length: 3),
+                replacementText: canonical,
+                newCursor: lineRange.location + canonicalLen
+            )
+        default:
+            return nil
+        }
+    }
+
+    /// Apply the expansion. Callers also need to set the text view's
+    /// selection to `expansion.newCursor` afterward (platform-specific).
+    public static func applyCheckboxAutoExpansion(_ expansion: CheckboxAutoExpansion,
+                                                  in storage: NSMutableAttributedString) {
+        storage.replaceCharacters(in: expansion.replaceRange, with: expansion.replacementText)
+    }
+
     // MARK: - Checkbox hit-testing
 
     /// Result of hit-testing a click/tap against a checkbox slot.
