@@ -14,17 +14,20 @@ struct NotesListView: View {
     @State private var search = ""
     @State private var capturing = false
 
-    // Two evenly-flexible columns instead of `.adaptive` — adaptive with
-    // variable-height cards intermittently left whole cells empty between
-    // rows. Fixed-count flexible columns tile every slot left-to-right.
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14),
-    ]
-
     private var filtered: [Note] {
         guard !search.isEmpty else { return model.notes }
         return model.notes.filter { $0.content.localizedCaseInsensitiveContains(search) }
+    }
+
+    /// Group notes into 2-card rows. We pair manually instead of relying on
+    /// LazyVGrid because both `.adaptive` and `.flexible()` were leaving
+    /// empty cells next to taller first-row cards on real hardware in
+    /// iOS 26 (the simulator showed the correct layout, real devices
+    /// didn't). This is what guarantees both columns get filled.
+    private var rows: [[Note]] {
+        stride(from: 0, to: filtered.count, by: 2).map { idx in
+            Array(filtered[idx..<min(idx + 2, filtered.count)])
+        }
     }
 
     var body: some View {
@@ -40,23 +43,21 @@ struct NotesListView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 64)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(filtered) { note in
-                                NoteCard(note: note, isShared: model.sharedNoteIDs.contains(note.id))
-                                    .onTapGesture { editing = note }
-                                    .contextMenu {
-                                        Button { UIPasteboard.general.string = note.content } label: {
-                                            Label("Copy", systemImage: "doc.on.doc")
-                                        }
-                                        ShareLink(item: note.content) {
-                                            Label("Share", systemImage: "square.and.arrow.up")
-                                        }
-                                        Button(role: .destructive) {
-                                            model.delete(note)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
+                        LazyVStack(spacing: 14) {
+                            ForEach(rows.indices, id: \.self) { rowIndex in
+                                let row = rows[rowIndex]
+                                HStack(alignment: .top, spacing: 14) {
+                                    ForEach(row) { note in
+                                        cardWithGestures(note)
+                                            .frame(maxWidth: .infinity)
                                     }
+                                    if row.count == 1 {
+                                        // Odd-final-row filler — preserves the
+                                        // half-width sizing without leaving an
+                                        // empty column elsewhere.
+                                        Color.clear.frame(maxWidth: .infinity)
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal, 16)
@@ -113,6 +114,26 @@ struct NotesListView: View {
 
     /// Calm CloudKit sync state, so an eventual-consistency delay reads as
     /// "Syncing…" rather than "my note didn't save."
+    /// One card with its tap target + context menu attached. Extracted from
+    /// the row loop so the body stays scannable.
+    @ViewBuilder private func cardWithGestures(_ note: Note) -> some View {
+        NoteCard(note: note, isShared: model.sharedNoteIDs.contains(note.id))
+            .onTapGesture { editing = note }
+            .contextMenu {
+                Button { UIPasteboard.general.string = note.content } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                ShareLink(item: note.content) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                Button(role: .destructive) {
+                    model.delete(note)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+    }
+
     @ViewBuilder private var syncStatus: some View {
         switch sync.state {
         case .syncing:
