@@ -231,8 +231,38 @@ private struct NoteCard: View {
     }
 
     private var preview: String {
-        let t = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? "New note" : t
+        let raw = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty { return "New note" }
+        var lines: [String] = []
+        for rawLine in raw.components(separatedBy: "\n") {
+            let line = Self.stripPreviewMarkers(rawLine)
+            // Collapse runs of blank lines into a single blank line — the
+            // user's intentional paragraph break is preserved, but extra
+            // empty lines (common after `# heading` blocks) don't blow up
+            // the card height.
+            if line.isEmpty {
+                if lines.last?.isEmpty != true { lines.append("") }
+            } else {
+                lines.append(line)
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Lightweight Markdown → preview text transform. Doesn't try to be a
+    /// full renderer; just removes the noise that makes the cards look
+    /// like raw source.
+    private static func stripPreviewMarkers(_ raw: String) -> String {
+        var s = raw
+        // Heading markers — `### `, `## `, `# `.
+        if s.hasPrefix("### ") { s.removeFirst(4) }
+        else if s.hasPrefix("## ") { s.removeFirst(3) }
+        else if s.hasPrefix("# ") { s.removeFirst(2) }
+        // Checkbox / list bullets — swap for proper glyphs.
+        if s.hasPrefix("- [ ] ") { s = "☐ " + s.dropFirst(6) }
+        else if s.hasPrefix("- [x] ") || s.hasPrefix("- [X] ") { s = "☑ " + s.dropFirst(6) }
+        else if s.hasPrefix("- ") || s.hasPrefix("* ") { s = "• " + s.dropFirst(2) }
+        return s
     }
 
     private static func relativeTime(_ date: Date) -> String {
