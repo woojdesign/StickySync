@@ -14,7 +14,13 @@ struct NotesListView: View {
     @State private var search = ""
     @State private var capturing = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
+    // Two evenly-flexible columns instead of `.adaptive` — adaptive with
+    // variable-height cards intermittently left whole cells empty between
+    // rows. Fixed-count flexible columns tile every slot left-to-right.
+    private let columns = [
+        GridItem(.flexible(), spacing: 14),
+        GridItem(.flexible(), spacing: 14),
+    ]
 
     private var filtered: [Note] {
         guard !search.isEmpty else { return model.notes }
