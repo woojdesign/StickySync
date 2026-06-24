@@ -41,7 +41,17 @@ struct CloudShareSheet: UIViewControllerRepresentable {
                 let (share, container) = try await ckStore.share(note)
                 let sharingController = UICloudSharingController(share: share, container: container)
                 sharingController.delegate = context.coordinator
-                sharingController.availablePermissions = [.allowReadWrite, .allowPrivate]
+                // Expose all four choices so the user can pick:
+                //   • Anyone with the link  vs  Only people I invite
+                //   • Can edit  vs  View only
+                // The share's own publicPermission is pre-set to
+                // .readWrite by CloudKitNoteStore.share(_:) so the
+                // "Anyone with the link" option is the working default,
+                // but they can still switch to invite-only and use the
+                // controller's Add People flow if they want to restrict.
+                sharingController.availablePermissions = [
+                    .allowReadWrite, .allowReadOnly, .allowPublic, .allowPrivate,
+                ]
                 context.coordinator.share = share
                 // Present from the host VC, which SwiftUI has placed in the
                 // hierarchy by now.
