@@ -214,12 +214,19 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     @MainActor
     private func presentCloudSharingPicker(share: CKShare, container: CKContainer) {
-        // The documented Mac path is an NSItemProvider that registers the
-        // share + container — passing raw [CKShare, CKContainer] as picker
-        // items doesn't surface the collaboration UI (the share is created
-        // in the back-end, but the picker presents nothing visible).
+        // Two parallel registrations on the same item provider:
+        //   • registerCKShare lets collaboration-aware services (Apple's
+        //     internal Messages collaboration handler, Mail's "Collaborate
+        //     via iCloud") wire up participant metadata.
+        //   • registerObject(share.url) gives Messages / Mail / etc a plain
+        //     URL they can drop into a message body — without it, picking a
+        //     contact in NSSharingServicePicker on macOS 15.6 launches
+        //     Messages with a blank compose window.
         let provider = NSItemProvider()
         provider.registerCKShare(share, container: container, allowedSharingOptions: .standard)
+        if let url = share.url {
+            provider.registerObject(url as NSURL, visibility: .all)
+        }
         let picker = NSSharingServicePicker(items: [provider])
         picker.delegate = self
         picker.show(relativeTo: noteView.shareButton.bounds,
