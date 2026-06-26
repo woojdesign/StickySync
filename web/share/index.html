@@ -155,6 +155,11 @@
 </div>
 
 <a class="open-link" id="open-sticky" href="#">Already have StickySync? Open the sticky →</a>
+<noscript>
+  <p class="cta-hint" style="margin-top: 20px;">
+    Enable JavaScript to use the "open the sticky" shortcut, or install StickySync from one of the buttons above.
+  </p>
+</noscript>
 
 <div class="footer">
   StickySync is one of a small family of <a href="https://wooj.design">calm tools from Wooj</a>.
@@ -185,11 +190,19 @@
       preview.innerHTML = safe + ' left you a <em>sticky</em> on StickySync.';
     }
 
-    // Wire the "Already have it? Open the sticky" link to the underlying
-    // iCloud URL, which the OS will route into the installed app.
+    // Wire the "Already have it? Open the sticky" link. We use a custom
+    // URL scheme (`stickysync://`) rather than the raw iCloud URL because:
+    //   • The iCloud URL opens iCloud's web UI in Safari (login page or
+    //     generic preview), not the installed app.
+    //   • The custom scheme is registered by StickySync's Info.plist and
+    //     reliably opens the installed app on the same device, even from
+    //     this Safari session (where Universal Links don't re-fire).
+    //   • On devices without the app installed, the tap is a no-op rather
+    //     than a confusing redirect to iCloud login.
     var openLink = document.getElementById('open-sticky');
     if (ckUrl) {
-      openLink.href = ckUrl;
+      var encodedCk = encodeURIComponent(ckUrl);
+      openLink.href = 'stickysync://share?ck=' + encodedCk;
     } else {
       openLink.style.display = 'none';
     }

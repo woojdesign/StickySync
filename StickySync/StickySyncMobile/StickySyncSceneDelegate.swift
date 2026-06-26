@@ -43,4 +43,64 @@ final class StickySyncSceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
         }
     }
+
+    /// Cold launch from a Universal Link tap. iOS hands us the originating
+    /// NSUserActivity via the connection options; if it's a browsing-web
+    /// activity for our share landing page, forward it through the same
+    /// universal-link path the warm continue handler uses.
+    func scene(_ scene: UIScene,
+               willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        if let userActivity = connectionOptions.userActivities.first(where: {
+            $0.activityType == NSUserActivityTypeBrowsingWeb
+        }) {
+            handleUniversalLink(userActivity)
+        }
+    }
+
+    /// Warm Universal Link tap — the app is already running, the user comes
+    /// in via a tapped link in Safari / Mail / etc.
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        handleUniversalLink(userActivity)
+    }
+
+    private func handleUniversalLink(_ userActivity: NSUserActivity) {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let url = userActivity.webpageURL else { return }
+        routeShareURL(url)
+    }
+
+    /// Custom URL scheme handler — `stickysync://share?ck=…`. Used as the
+    /// in-page "Open the sticky →" tap target so the landing page has a
+    /// deterministic open-the-app trigger that works from the same Safari
+    /// session as the landing page itself (where Universal Links don't
+    /// re-fire).
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts where context.url.scheme == "stickysync" {
+            routeShareURL(context.url)
+        }
+    }
+
+    /// Shared accept path for both Universal Links and the `stickysync://`
+    /// custom URL scheme. Extracts the `ck=` query parameter (the iCloud
+    /// share URL) and runs it through `CloudKitNoteStore.acceptShare(from:)`.
+    private func routeShareURL(_ url: URL) {
+        guard let ckStore = NoteStoreProvider.shared as? CloudKitNoteStore,
+              let ckString = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "ck" })?.value,
+              let ckURL = URL(string: ckString) else {
+            NSLog("StickySync: incoming share URL missing or malformed ck= param: \(url)")
+            return
+        }
+        Task { @MainActor in
+            do {
+                let arrived = try await ckStore.acceptShare(from: ckURL)
+                if let arrived {
+                    NotificationCenter.default.post(name: .didAcceptSharedNote, object: arrived)
+                }
+            } catch {
+                NSLog("StickySync: incoming share accept failed: \(error)")
+            }
+        }
+    }
 }

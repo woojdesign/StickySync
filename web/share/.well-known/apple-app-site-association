@@ -1,0 +1,18 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "BSPX8X9U4B.wooj.StickySync",
+          "BSPX8X9U4B.wooj.StickySyncMobile"
+        ],
+        "components": [
+          {
+            "?": { "ck": "?*" },
+            "comment": "Routes any URL on this domain with a ck= query parameter into the installed StickySync app (Mac or iOS). The ck value is the underlying iCloud share URL; the app extracts it, fetches CKShare.Metadata, and accepts the share through the existing acceptShareInvitation path."
+          }
+        ]
+      }
+    ]
+  }
+}

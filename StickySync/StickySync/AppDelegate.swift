@@ -255,4 +255,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
+    /// Universal Link handler. Tapped a `https://sticky-sync.vercel.app/?ck=…`
+    /// URL anywhere on the system — Safari, Mail, a note in another app, an
+    /// AirDropped message. macOS routes here based on the
+    /// `applinks:sticky-sync.vercel.app` entitlement + the AASA file served
+    /// at that domain. We extract the embedded iCloud share URL from the
+    /// `ck` query parameter, fetch its share metadata, and run it through
+    /// the same accept flow that the Messages collaboration path uses.
+    func application(_ application: NSApplication,
+                     continue userActivity: NSUserActivity,
+                     restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let url = userActivity.webpageURL else {
+            return false
+        }
+        guard let ckStore = store as? CloudKitNoteStore,
+              let ckString = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "ck" })?.value,
+              let ckURL = URL(string: ckString) else {
+            NSLog("StickySync: universal link missing or malformed ck= param: \(url)")
+            return false
+        }
+        Task { @MainActor in
+            do {
+                let arrived = try await ckStore.acceptShare(from: ckURL)
+                NSApp.activate(ignoringOtherApps: true)
+                if let arrived {
+                    openWindow(for: arrived, focus: true)
+                }
+            } catch {
+                NSLog("StickySync: universal-link share accept failed: \(error)")
+            }
+        }
+        return true
+    }
+
+    /// Custom URL scheme handler — `stickysync://share?ck=…`. Used as the
+    /// in-page "Open the sticky →" tap target on the landing page, which
+    /// needs a deterministic open-the-app trigger that works even from the
+    /// same Safari session as our landing page (where Universal Links
+    /// don't re-fire).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "stickysync" {
+            guard let ckString = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "ck" })?.value,
+                  let ckURL = URL(string: ckString),
+                  let ckStore = store as? CloudKitNoteStore else {
+                NSLog("StickySync: stickysync:// open with no ck=: \(url)")
+                continue
+            }
+            Task { @MainActor in
+                do {
+                    let arrived = try await ckStore.acceptShare(from: ckURL)
+                    NSApp.activate(ignoringOtherApps: true)
+                    if let arrived {
+                        openWindow(for: arrived, focus: true)
+                    }
+                } catch {
+                    NSLog("StickySync: stickysync:// share accept failed: \(error)")
+                }
+            }
+        }
+    }
 }
