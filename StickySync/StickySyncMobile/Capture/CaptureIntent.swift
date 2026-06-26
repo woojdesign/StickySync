@@ -8,6 +8,11 @@ import Foundation
 /// `.startCapture` name.
 enum CaptureLauncher {
     @MainActor static var pending = false
+    /// Mirror of `CaptureViewModel.phase == .listening`. Maintained by the
+    /// view model on every begin / finish / cancel transition, read by
+    /// `CaptureIntent.perform()` to decide whether the Action Button press
+    /// should START a new take or STOP the one already running.
+    @MainActor static var isCapturing = false
 }
 
 /// The single voice-capture entry point — Action Button, Lock-Screen /
@@ -22,8 +27,15 @@ struct CaptureIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        CaptureLauncher.pending = true
-        NotificationCenter.default.post(name: .startCapture, object: nil)
+        // Toggle behavior: a second Action Button press while a take is in
+        // progress ends that take (same effect as tapping Done). A press
+        // outside a take starts a new one.
+        if CaptureLauncher.isCapturing {
+            NotificationCenter.default.post(name: .stopCapture, object: nil)
+        } else {
+            CaptureLauncher.pending = true
+            NotificationCenter.default.post(name: .startCapture, object: nil)
+        }
         return .result()
     }
 }

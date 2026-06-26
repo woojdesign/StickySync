@@ -78,7 +78,18 @@ struct NotesListView: View {
             CaptureSheet(store: model.sharedStore)
         }
         .onReceive(NotificationCenter.default.publisher(for: .startCapture)) { _ in
-            capturing = true
+            // If the editor is already presented as a fullScreenCover, raising
+            // the capture cover does nothing — SwiftUI shows one cover at a
+            // time. Dismiss the editor first, then raise capture on the next
+            // runloop tick so the dismiss animation can hand off cleanly.
+            if editing != nil {
+                editing = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    capturing = true
+                }
+            } else {
+                capturing = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .didAcceptSharedNote)) { note in
             // Reload the list so the new shared note is in `model.notes`,

@@ -49,6 +49,12 @@ final class CaptureViewModel: ObservableObject {
             .assign(to: \.partialText, on: self).store(in: &cancellables)
         recorder.$level.receive(on: RunLoop.main)
             .assign(to: \.level, on: self).store(in: &cancellables)
+        // Action Button pressed mid-take: end the take just as if the user tapped
+        // Done. Posted by `CaptureIntent` when it sees `CaptureLauncher.isCapturing`.
+        NotificationCenter.default.publisher(for: .stopCapture)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.done() }
+            .store(in: &cancellables)
     }
 
     /// Entry point for every trigger route. Safe to call repeatedly.
@@ -71,6 +77,7 @@ final class CaptureViewModel: ObservableObject {
         stopEngines()
         reset()
         phase = .idle
+        CaptureLauncher.isCapturing = false
     }
 
     func openSettings() {
@@ -102,12 +109,18 @@ final class CaptureViewModel: ObservableObject {
         // ready the instant they stop.
         finalizer.prewarm()
         withAnimation(WoojMotion.calm.animation) { phase = .listening }
+        // Mirror the listening state for the Action Button intent so a second
+        // press routes to `.stopCapture` instead of starting a new take.
+        CaptureLauncher.isCapturing = true
         startTicker()
     }
 
     private func finish() async {
         guard phase == .listening else { return }
         stopEngines()
+        // Listening just ended — the Action Button now starts a new take rather
+        // than stopping one that's already over.
+        CaptureLauncher.isCapturing = false
 
         let fast = speech.end()
         let text = (fast.isEmpty ? partialText : fast)
