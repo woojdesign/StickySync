@@ -24,12 +24,13 @@
     text-rendering: optimizeLegibility;
   }
   .wordmark {
-    font-family: Charter, "Source Serif Pro", Georgia, serif;
-    font-size: 17px;
-    font-weight: 500;
-    letter-spacing: 0.4px;
     margin-bottom: 56px;
-    opacity: 0.55;
+    opacity: 0.85;
+  }
+  .wordmark img {
+    display: block;
+    height: 28px;
+    width: auto;
   }
   .sticky {
     background: #FBF1C9;
@@ -124,7 +125,9 @@
 </style>
 </head>
 <body>
-<div class="wordmark">Wooj</div>
+<a class="wordmark" href="https://wooj.design" aria-label="Wooj">
+  <img src="wooj-logo.png" alt="Wooj" width="56" height="25" loading="eager">
+</a>
 
 <div class="sticky" id="sticky-preview">
   Someone left you a <em>sticky</em> on StickySync.
@@ -144,7 +147,7 @@
   </div>
 
   <div class="install-ios">
-    <a class="cta" href="https://testflight.apple.com/join/REPLACE-WITH-PUBLIC-CODE">
+    <a class="cta" href="https://testflight.apple.com/join/7afKTgZh">
       Get StickySync for iPhone
     </a>
     <div class="cta-hint">TestFlight beta · iOS 16 or later</div>

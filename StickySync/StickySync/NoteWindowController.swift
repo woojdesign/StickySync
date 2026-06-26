@@ -221,7 +221,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     ///
     /// The base URL points at where the landing page is hosted. Update this
     /// constant once Wooj's hosting destination is settled.
-    private static let landingPageBase = URL(string: "https://share.wooj.design/")!
+    private static let landingPageBase = URL(string: "https://sticky-sync.vercel.app/")!
 
     private func wrappedShareURL(_ ckURL: URL) -> URL? {
         var components = URLComponents(url: Self.landingPageBase, resolvingAgainstBaseURL: false)
