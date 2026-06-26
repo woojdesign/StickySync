@@ -133,6 +133,13 @@ echo "==> Waiting for processing + setting What to Test"
     --build     "$BUILD_NUMBER" \
     --notes-file "$NOTES_FILE"
 
+# --- 6. Keep CLAUDE.md truthful ---------------------------------------------
+# Future Claude sessions read "Last shipped" to find the right "since" tag
+# and to set expectations. Failures here are non-fatal — the upload itself
+# already succeeded.
+./scripts/bump_claude_md.sh ios "$VERSION" "$BUILD_NUMBER" || \
+    echo "warn: failed to bump CLAUDE.md (upload is shipped — fix manually)"
+
 echo
 echo "Uploaded StickySyncMobile $VERSION ($BUILD_NUMBER) to TestFlight."
 echo "  • Internal testers can install as soon as processing finishes."

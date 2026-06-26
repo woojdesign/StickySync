@@ -91,6 +91,12 @@ gh release create "$TAG" \
     --title "StickySync $VERSION" \
     --notes-file "$RELEASES/NOTES.md"
 
+# 5. Keep CLAUDE.md's "Last shipped" line truthful so future Claude
+#    sessions don't operate on stale assumptions. Failures here are
+#    non-fatal — the release itself already succeeded.
+./scripts/bump_claude_md.sh mac "$VERSION" || \
+    echo "warn: failed to bump CLAUDE.md (release is shipped — fix manually)"
+
 echo
 echo "Released $TAG."
 echo "  Feed: https://github.com/$REPO/releases/latest/download/appcast.xml"
