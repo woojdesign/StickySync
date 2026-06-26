@@ -65,8 +65,36 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(syncItem)
 
         menu.addItem(.separator())
+        menu.addItem(themeSubmenu())
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit StickySync",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+    }
+
+    /// "Theme" submenu — one entry per bundled theme with a checkmark next to
+    /// the active one. Picking flips `ThemeStore.shared`, which posts
+    /// `.themeChanged` so open note windows + the menu's own swatches
+    /// repaint on the next open.
+    private func themeSubmenu() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: "Theme")
+        let currentID = ThemeStore.shared.current.id
+        for t in Themes.all {
+            let item = NSMenuItem(title: t.displayName,
+                                  action: #selector(pickTheme(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = t.id
+            item.state = (t.id == currentID) ? .on : .off
+            sub.addItem(item)
+        }
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func pickTheme(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        ThemeStore.shared.select(id)
     }
 
     private var syncTitle: String {

@@ -73,6 +73,24 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         applyAppearance()
         refreshShareIndicator()
         noteView.scrollView.isHidden = note.collapsed
+
+        // Repaint when the user picks a new theme (or iCloud syncs one in).
+        // The token doesn't change — the hex resolution does — so we just
+        // re-run applyAppearance() on every open window.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeChanged),
+            name: .themeChanged,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func themeChanged() {
+        DispatchQueue.main.async { [weak self] in self?.applyAppearance() }
     }
 
     func show(focus: Bool) {

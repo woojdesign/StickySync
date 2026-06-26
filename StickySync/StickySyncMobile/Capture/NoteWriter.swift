@@ -14,14 +14,15 @@ final class NoteWriter {
         self.store = store
     }
 
-    /// Creates a butter sticky from `text`. Returns the note, or nil if the
-    /// text is empty — Capture never creates empty notes.
+    /// Creates a default-colored sticky from `text`. Returns the note, or nil
+    /// if the text is empty — Capture never creates empty notes.
     @discardableResult
     func write(_ text: String) -> Note? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        // "butter" == Palette.defaultToken; recolorable later in StickySync.
-        let note = Note(content: trimmed, colorToken: "butter")
+        // Slot 1 is the canonical yellow-ish in every theme; the user can
+        // recolor in the editor.
+        let note = Note(content: trimmed, colorToken: Palette.defaultToken)
         store.add(note)
         return note
     }

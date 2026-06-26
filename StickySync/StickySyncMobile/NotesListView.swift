@@ -10,6 +10,10 @@ import WoojTokens
 struct NotesListView: View {
     @EnvironmentObject private var model: NotesModel
     @StateObject private var sync = SyncMonitor()
+    /// Observed so a theme switch (local or iCloud-arrival) re-renders the
+    /// grid with the new palette. The store itself is read-only here; the
+    /// header's palette button is what flips it.
+    @ObservedObject private var theme = ThemeStore.shared
     @State private var editing: Note?
     @State private var search = ""
     @State private var capturing = false
@@ -112,26 +116,74 @@ struct NotesListView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Charter stands in for the wooj display face (Fraunces) until the
-            // custom faces are bundled; it renders as a real serif today.
-            Text("Notes")
-                .font(.custom(WoojType.reading.family, size: 34).weight(.semibold))
-                .foregroundStyle(WoojColor.ink)
-            HStack(spacing: 6) {
-                Text("^[\(model.notes.count) note](inflect: true)")
-                if sync.state != .idle {
-                    Text("·")
-                    syncStatus
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                // Charter stands in for the wooj display face (Fraunces) until the
+                // custom faces are bundled; it renders as a real serif today.
+                Text("Notes")
+                    .font(.custom(WoojType.reading.family, size: 34).weight(.semibold))
+                    .foregroundStyle(WoojColor.ink)
+                HStack(spacing: 6) {
+                    Text("^[\(model.notes.count) note](inflect: true)")
+                    if sync.state != .idle {
+                        Text("·")
+                        syncStatus
+                    }
                 }
+                .font(.system(size: 13))
+                .foregroundStyle(WoojColor.tertiary)
+                .animation(WoojMotion.calm.animation, value: sync.state)
             }
-            .font(.system(size: 13))
-            .foregroundStyle(WoojColor.tertiary)
-            .animation(WoojMotion.calm.animation, value: sync.state)
+            Spacer(minLength: 12)
+            themePicker
+                .padding(.top, 10)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
     }
+
+    /// Compact swatch trio that opens a Menu of available themes. Lives in the
+    /// header rather than a Settings screen because theme is the one app-wide
+    /// preference, and the visual swatches read instantly as "pick a vibe."
+    private var themePicker: some View {
+        Menu {
+            ForEach(Themes.all) { t in
+                Button {
+                    withAnimation(WoojMotion.calm.animation) {
+                        ThemeStore.shared.select(t.id)
+                    }
+                } label: {
+                    if t.id == theme.current.id {
+                        Label(t.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(t.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                ForEach(themeSwatchSlots, id: \.self) { slot in
+                    Circle()
+                        .fill(Appearance.background(slot))
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(WoojColor.line.opacity(0.4), lineWidth: 0.5))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                Capsule().fill(WoojColor.surface)
+            )
+            .overlay(
+                Capsule().stroke(WoojColor.line, lineWidth: 0.5)
+            )
+        }
+        .accessibilityLabel("Theme: \(theme.current.displayName)")
+    }
+
+    /// The three swatches shown in the header chip — slots 1, 4, 6 give a
+    /// reasonable cross-section of warm / cool / green of any theme.
+    private let themeSwatchSlots = ["1", "4", "6"]
 
     /// Calm CloudKit sync state, so an eventual-consistency delay reads as
     /// "Syncing…" rather than "my note didn't save."

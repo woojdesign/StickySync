@@ -25,6 +25,24 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
         super.init()
         window.delegate = self
         buildUI()
+
+        // The list cells render swatches via NotePreview.swatch(for:), which
+        // resolves through the current theme. Re-render every cell when the
+        // theme flips so the row swatches stay truthful.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeChanged),
+            name: .themeChanged,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func themeChanged() {
+        DispatchQueue.main.async { [weak self] in self?.tableView.reloadData() }
     }
 
     func show() {

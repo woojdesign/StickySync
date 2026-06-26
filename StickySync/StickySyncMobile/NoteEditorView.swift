@@ -10,6 +10,11 @@ import WoojTokens
 struct NoteEditorView: View {
     @EnvironmentObject private var model: NotesModel
     @Environment(\.dismiss) private var dismiss
+    /// Observed so the editor background, palette dock swatches, and the
+    /// MarkdownTextView reactor (via the `theme.current.id` change-key)
+    /// re-render when the user picks a new theme on this device or the
+    /// other one syncs in.
+    @ObservedObject private var theme = ThemeStore.shared
     @State private var note: Note
     @State private var saveTask: Task<Void, Never>?
     @State private var landed = false
@@ -30,7 +35,9 @@ struct NoteEditorView: View {
                     text: $note.content,
                     isFocused: $focused,
                     font: Appearance.uiFont(note.fontName, size: CGFloat(note.fontSize)),
-                    textColor: UIColor(WoojColor.reading),
+                    // Per-slot text color (resolved through the current theme)
+                    // so a saturated theme can ride white-on-punch, etc.
+                    textColor: Appearance.uiText(note.colorToken),
                     tintColor: UIColor(WoojColor.clay)
                 )
                 .padding(.horizontal, WoojSpace.lg)

@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if notes.isEmpty {
             let welcome = Note(
                 content: "Welcome to StickySync.\n\nDrag me by the title bar. Hover for the color and font controls. Close (✕) just hides a note — reopen it from the menu-bar list or All Notes (⌘L).",
-                colorToken: "butter"
+                colorToken: Palette.defaultToken
             )
             store.add(welcome)
             openWindow(for: welcome, focus: false)

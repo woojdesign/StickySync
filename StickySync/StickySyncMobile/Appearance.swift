@@ -3,18 +3,24 @@ import UIKit
 import NotesKit
 import WoojTokens
 
-// wooj-tokens test: map NotesKit's note tokens onto the WoojSticky range and use
-// wooj ink for text. WoojColor/WoojSticky are already SwiftUI Colors, so there's
-// no bridge here (unlike the macOS AppKit side).
 enum Appearance {
-    private static let woojSticky: [String: Color] = [
-        "butter": WoojSticky.butter, "peach": WoojSticky.apricot, "rose": WoojSticky.rose,
-        "lilac": WoojSticky.lilac, "sky": WoojSticky.sky, "mint": WoojSticky.sage, "sand": WoojSticky.cream
-    ]
+    @MainActor
+    static func background(_ token: String) -> Color {
+        let p = Palette.color(for: token)
+        return Color(uiColor: UIColor.dynamic(
+            light: .fromHex(p.lightBackgroundHex),
+            dark:  .fromHex(p.darkBackgroundHex)
+        ))
+    }
 
-    static func background(_ token: String) -> Color { woojSticky[token] ?? WoojSticky.butter }
-
-    static func text(_ token: String) -> Color { WoojColor.ink }
+    @MainActor
+    static func text(_ token: String) -> Color {
+        let p = Palette.color(for: token)
+        return Color(uiColor: UIColor.dynamic(
+            light: .fromHex(p.lightTextHex),
+            dark:  .fromHex(p.darkTextHex)
+        ))
+    }
 
     static func font(_ id: String, size: CGFloat) -> Font {
         switch FontCatalog.option(for: id).kind {
@@ -24,6 +30,23 @@ enum Appearance {
         case .monospaced:      return .system(size: size, design: .monospaced)
         case .named(let name): return .custom(name, size: size)
         }
+    }
+
+    /// UIKit equivalent of `background(_:)` for editors that need a UIColor
+    /// directly (Markdown text view sets its own UIColor backgrounds).
+    @MainActor
+    static func uiBackground(_ token: String) -> UIColor {
+        let p = Palette.color(for: token)
+        return .dynamic(light: .fromHex(p.lightBackgroundHex),
+                        dark:  .fromHex(p.darkBackgroundHex))
+    }
+
+    /// UIKit equivalent of `text(_:)`.
+    @MainActor
+    static func uiText(_ token: String) -> UIColor {
+        let p = Palette.color(for: token)
+        return .dynamic(light: .fromHex(p.lightTextHex),
+                        dark:  .fromHex(p.darkTextHex))
     }
 
     /// UIFont equivalent for use with UIKit-backed editors (Markdown wrapper).
@@ -43,6 +66,27 @@ enum Appearance {
             return .monospacedSystemFont(ofSize: size, weight: .regular)
         case .named(let name):
             return UIFont(name: name, size: size) ?? .systemFont(ofSize: size)
+        }
+    }
+}
+
+extension UIColor {
+    static func fromHex(_ hex: String) -> UIColor {
+        var str = hex
+        if str.hasPrefix("#") { str.removeFirst() }
+        var value: UInt64 = 0
+        Scanner(string: str).scanHexInt64(&value)
+        let r = CGFloat((value & 0xFF0000) >> 16) / 255.0
+        let g = CGFloat((value & 0x00FF00) >> 8)  / 255.0
+        let b = CGFloat( value & 0x0000FF)        / 255.0
+        return UIColor(red: r, green: g, blue: b, alpha: 1.0)
+    }
+
+    /// Resolves to a different color in light vs dark trait collections —
+    /// the payoff of storing a color *token* rather than a frozen value.
+    static func dynamic(light: UIColor, dark: UIColor) -> UIColor {
+        UIColor { trait in
+            trait.userInterfaceStyle == .dark ? dark : light
         }
     }
 }
