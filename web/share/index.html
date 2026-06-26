@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3EFE4">
+<title>A sticky was shared with you · StickySync</title>
+<meta name="description" content="A calm sticky-notes app from Wooj. Mac and iPhone, sync via iCloud.">
+<meta property="og:title" content="A sticky was shared with you">
+<meta property="og:description" content="Open it in StickySync — a calm sticky-notes app from Wooj.">
+<meta property="og:type" content="website">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #F3EFE4; color: #1C1B1A; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 56px 24px 80px;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wordmark {
+    font-family: Charter, "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    margin-bottom: 56px;
+    opacity: 0.55;
+  }
+  .sticky {
+    background: #FBF1C9;
+    width: 280px;
+    min-height: 180px;
+    border-radius: 14px;
+    padding: 26px 28px;
+    box-shadow:
+      0 1px 0 rgba(28, 27, 26, 0.04),
+      0 10px 28px rgba(28, 27, 26, 0.09);
+    transform: rotate(-1.4deg);
+    margin-bottom: 56px;
+    font-family: Charter, "Source Serif Pro", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.55;
+    color: #1C1B1A;
+    transition: transform 200ms ease-out;
+  }
+  .sticky:hover { transform: rotate(-0.6deg) translateY(-2px); }
+  .sticky em {
+    color: #C2674F;
+    font-style: normal;
+    font-weight: 500;
+  }
+  h1 {
+    font-family: Charter, "Source Serif Pro", Georgia, serif;
+    font-size: 30px;
+    font-weight: 400;
+    line-height: 1.25;
+    margin-bottom: 14px;
+    max-width: 460px;
+    text-align: center;
+    letter-spacing: -0.3px;
+  }
+  .subtitle {
+    max-width: 420px;
+    text-align: center;
+    color: rgba(28, 27, 26, 0.68);
+    margin-bottom: 44px;
+    font-size: 15.5px;
+    line-height: 1.55;
+  }
+  .cta {
+    display: inline-block;
+    background: #1C1B1A;
+    color: #FBFAF5;
+    text-decoration: none;
+    padding: 14px 28px;
+    border-radius: 999px;
+    font-size: 15.5px;
+    font-weight: 500;
+    transition: transform 120ms ease-out, opacity 120ms;
+  }
+  .cta:hover { transform: translateY(-1px); opacity: 0.95; }
+  .cta:active { transform: translateY(0); }
+  .cta-row { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cta-hint {
+    font-size: 13px;
+    color: rgba(28, 27, 26, 0.55);
+    margin-top: 2px;
+  }
+  .open-link {
+    margin-top: 36px;
+    color: #C2674F;
+    text-decoration: none;
+    font-size: 14.5px;
+    border-bottom: 1px solid rgba(194, 103, 79, 0.3);
+    padding-bottom: 1px;
+  }
+  .open-link:hover { border-bottom-color: rgba(194, 103, 79, 0.7); }
+  .footer {
+    margin-top: 96px;
+    color: rgba(28, 27, 26, 0.45);
+    font-size: 13px;
+    text-align: center;
+    max-width: 360px;
+    line-height: 1.55;
+  }
+  .footer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .footer a:hover { color: rgba(28, 27, 26, 0.7); }
+
+  /* Without JS, show ALL install paths so the page degrades gracefully.
+     With JS, hide the ones irrelevant to the detected platform. */
+  body[data-platform="mac"]   .install-ios { display: none; }
+  body[data-platform="ios"]   .install-mac { display: none; }
+  body[data-platform="other"] .install-mac, body[data-platform="other"] .install-ios { /* show both */ }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 26px; }
+    .sticky { width: 240px; min-height: 160px; padding: 22px 24px; font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wordmark">Wooj</div>
+
+<div class="sticky" id="sticky-preview">
+  Someone left you a <em>sticky</em> on StickySync.
+</div>
+
+<h1>To open it, you'll need StickySync.</h1>
+<p class="subtitle">
+  A calm sticky-notes app for Mac and iPhone, by Wooj. Install it once — your friend's note will appear in your stickies.
+</p>
+
+<div class="cta-row">
+  <div class="install-mac">
+    <a class="cta" href="https://github.com/woojdesign/StickySync/releases/latest/download/StickySync.zip">
+      Get StickySync for Mac
+    </a>
+    <div class="cta-hint">macOS 15.6 or later · ~5 MB</div>
+  </div>
+
+  <div class="install-ios">
+    <a class="cta" href="https://testflight.apple.com/join/REPLACE-WITH-PUBLIC-CODE">
+      Get StickySync for iPhone
+    </a>
+    <div class="cta-hint">TestFlight beta · iOS 16 or later</div>
+  </div>
+</div>
+
+<a class="open-link" id="open-sticky" href="#">Already have StickySync? Open the sticky →</a>
+
+<div class="footer">
+  StickySync is one of a small family of <a href="https://wooj.design">calm tools from Wooj</a>.
+  Local, native, yours.
+</div>
+
+<script>
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var ckUrl = params.get('ck');         // the underlying iCloud share URL
+    var senderName = params.get('from');  // optional, personalizes the sticky
+
+    // Platform detection — show the appropriate install path. Falls back to
+    // showing both on Linux / unknown UA.
+    var ua = navigator.userAgent;
+    var platform = 'other';
+    if (/iPhone|iPad|iPod/.test(ua)) platform = 'ios';
+    else if (/Macintosh|MacIntel/.test(ua)) platform = 'mac';
+    document.body.dataset.platform = platform;
+
+    // Personalize the sticky if the sender name was passed.
+    if (senderName) {
+      var preview = document.getElementById('sticky-preview');
+      // Trim + escape so anything passed via the URL can't break out.
+      var safe = String(senderName).slice(0, 40).replace(/[<>&"']/g, function (c) {
+        return ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c];
+      });
+      preview.innerHTML = safe + ' left you a <em>sticky</em> on StickySync.';
+    }
+
+    // Wire the "Already have it? Open the sticky" link to the underlying
+    // iCloud URL, which the OS will route into the installed app.
+    var openLink = document.getElementById('open-sticky');
+    if (ckUrl) {
+      openLink.href = ckUrl;
+    } else {
+      openLink.style.display = 'none';
+    }
+  })();
+</script>
+</body>
+</html>
