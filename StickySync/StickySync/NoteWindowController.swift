@@ -212,21 +212,53 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         }
     }
 
+    /// Wrap a raw iCloud `share.url` in our landing page so recipients
+    /// without StickySync installed get a Wooj-styled install prompt
+    /// (`web/share/index.html`) instead of Apple's misleading "you need a
+    /// newer version" wall. Installed recipients land on the page briefly
+    /// then click through to the iCloud URL, which the OS routes to the
+    /// app like any other share link.
+    ///
+    /// The base URL points at where the landing page is hosted. Update this
+    /// constant once Wooj's hosting destination is settled.
+    private static let landingPageBase = URL(string: "https://share.wooj.design/")!
+
+    private func wrappedShareURL(_ ckURL: URL) -> URL? {
+        var components = URLComponents(url: Self.landingPageBase, resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            URLQueryItem(name: "ck", value: ckURL.absoluteString),
+            URLQueryItem(name: "from", value: NSFullUserName()),
+        ]
+        return components?.url
+    }
+
     @MainActor
     private func presentCloudSharingPicker(share: CKShare, container: CKContainer) {
-        // Two parallel registrations on the same item provider:
-        //   • registerCKShare lets collaboration-aware services (Apple's
-        //     internal Messages collaboration handler, Mail's "Collaborate
-        //     via iCloud") wire up participant metadata.
-        //   • registerObject(share.url) gives Messages / Mail / etc a plain
-        //     URL they can drop into a message body — without it, picking a
-        //     contact in NSSharingServicePicker on macOS 15.6 launches
-        //     Messages with a blank compose window.
+        // We intentionally do NOT call `provider.registerCKShare(...)` here.
+        // CKShare registration makes Apple's iMessage / Mail collaboration
+        // handler send the raw `https://www.icloud.com/share/...` URL — which
+        // routes correctly for recipients who already have StickySync, but
+        // dead-ends with "you need a newer version" for everyone else.
+        //
+        // Sending the wrapped Wooj landing URL instead gives both cases a
+        // graceful path: installed recipients see the page briefly and
+        // click through; non-installed recipients see an install prompt and
+        // can come back to open the sticky once they have the app.
+        //
+        // The cost is Apple's in-Messages collaboration UI (avatars,
+        // "Edited just now" inline labels) — those only appear when the
+        // CKShare wrapper is registered. We trade the inline collaboration
+        // chrome for actually-working delivery, since most shares today are
+        // to people who don't have the app yet.
         let provider = NSItemProvider()
-        provider.registerCKShare(share, container: container, allowedSharingOptions: .standard)
-        if let url = share.url {
-            provider.registerObject(url as NSURL, visibility: .all)
-        }
+        let urlToShare: NSURL = {
+            if let raw = share.url, let wrapped = wrappedShareURL(raw) {
+                return wrapped as NSURL
+            }
+            if let raw = share.url { return raw as NSURL }
+            return URL(string: "https://share.wooj.design/")! as NSURL
+        }()
+        provider.registerObject(urlToShare, visibility: .all)
         let picker = NSSharingServicePicker(items: [provider])
         picker.delegate = self
         picker.show(relativeTo: noteView.shareButton.bounds,
