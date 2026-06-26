@@ -293,6 +293,11 @@ private struct SearchField: View {
 private struct NoteCard: View {
     let note: Note
     var isShared: Bool = false
+    /// SwiftUI skips re-running body when a struct's stored props are
+    /// unchanged. `note` doesn't change on a theme switch — only the
+    /// resolution of its `colorToken` does — so the card has to observe
+    /// the theme directly to know its body should re-run.
+    @ObservedObject private var theme = ThemeStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: WoojSpace.md) {
