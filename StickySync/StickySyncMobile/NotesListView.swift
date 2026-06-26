@@ -80,6 +80,16 @@ struct NotesListView: View {
         .onReceive(NotificationCenter.default.publisher(for: .startCapture)) { _ in
             capturing = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .didAcceptSharedNote)) { note in
+            // Reload the list so the new shared note is in `model.notes`,
+            // then route straight into the editor for it. The user just
+            // tapped the share link in Messages; landing them on the note
+            // itself (not the list) is the deliberate arrival moment.
+            if let arrived = note.object as? Note {
+                model.reload()
+                editing = arrived
+            }
+        }
         .onAppear {
             // Cold launch via the Capture intent: the .startCapture post may have
             // fired before this view was listening, so consume the flag too.

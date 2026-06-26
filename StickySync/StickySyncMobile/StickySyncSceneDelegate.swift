@@ -12,20 +12,32 @@ import UIKit
 import CloudKit
 import NotesKit
 
+extension Notification.Name {
+    /// Posted with the arrived `Note` as the object once an incoming share
+    /// has been accepted and the new note shows up locally. NotesListView
+    /// listens and opens the editor for it.
+    static let didAcceptSharedNote = Notification.Name("StickySync.didAcceptSharedNote")
+}
+
 final class StickySyncSceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func windowScene(_ windowScene: UIWindowScene,
                      userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
-        // Forward the accept to the same CloudKitNoteStore the SwiftUI side
-        // is reading from, so the new shared note appears in the list.
         guard let ckStore = NoteStoreProvider.shared as? CloudKitNoteStore else {
             NSLog("StickySync: accept-share callback fired but store isn't CloudKitNoteStore")
             return
         }
-        Task {
+        Task { @MainActor in
             do {
-                try await ckStore.acceptShareInvitation(metadata: cloudKitShareMetadata)
+                let arrived = try await ckStore.acceptShareInvitation(metadata: cloudKitShareMetadata)
+                if let arrived {
+                    // Hand the arrived note to the SwiftUI side so the list
+                    // can route into the editor — the user's eyes are on
+                    // Messages right before this fires; we want them to land
+                    // on the note itself, not the list.
+                    NotificationCenter.default.post(name: .didAcceptSharedNote, object: arrived)
+                }
             } catch {
                 NSLog("StickySync: accept share failed: \(error)")
             }

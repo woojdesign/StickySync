@@ -233,17 +233,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// AppKit fires this when the user taps a CKShare URL (from iMessage,
     /// Mail, AirDrop, etc.) and StickySync is the registered owner of the
-    /// container. Forward to the store so the new shared note lands in the
-    /// `.shared` persistent store.
+    /// container. Forward to the store, then — once the new note actually
+    /// shows up in the store — bring the app forward and open the sticky
+    /// as a window so the arrival feels like a deliberate moment, not a
+    /// silent background sync.
     func application(_ application: NSApplication,
                      userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
         guard let ckStore = store as? CloudKitNoteStore else {
             NSLog("StickySync: accept-share fired but store isn't CloudKitNoteStore")
             return
         }
-        Task {
+        Task { @MainActor in
             do {
-                try await ckStore.acceptShareInvitation(metadata: metadata)
+                let arrived = try await ckStore.acceptShareInvitation(metadata: metadata)
+                NSApp.activate(ignoringOtherApps: true)
+                if let arrived {
+                    openWindow(for: arrived, focus: true)
+                }
             } catch {
                 NSLog("StickySync: accept share failed: \(error)")
             }
