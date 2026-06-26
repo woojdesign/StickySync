@@ -1,11 +1,14 @@
 import SwiftUI
+import NotesKit
 import WoojTokens
 
-/// The saved state: the transcript settles into a butter sticky with a calm
+/// The saved state: the transcript settles into a colored sticky with a calm
 /// spring, a clay check, a `voice · {time}` footer, and an "Saved" hint.
-/// Tappable to re-record before it auto-dismisses.
+/// Tappable (on the sticky body) to re-record before it auto-dismisses;
+/// the swatch dock below lets the user pick a color while WhisperKit polishes.
 struct SavedView: View {
     @ObservedObject var vm: CaptureViewModel
+    @ObservedObject private var theme = ThemeStore.shared
     @State private var landed = false
 
     var body: some View {
@@ -13,16 +16,44 @@ struct SavedView: View {
             sticky
                 .scaleEffect(landed ? 1 : 0.92)
                 .opacity(landed ? 1 : 0)
+                .contentShape(Rectangle())
+                .onTapGesture { vm.recapture() }
+
+            paletteDock
+                .opacity(landed ? 1 : 0)
 
             hint
                 .opacity(landed ? 1 : 0)
         }
         .padding(.horizontal, WoojSpace.xl)
-        .contentShape(Rectangle())
-        .onTapGesture { vm.recapture() }
         .onAppear {
             withAnimation(WoojMotion.settle.animation) { landed = true }
         }
+    }
+
+    /// Color picker shown beneath the saved sticky. The dock isn't part of
+    /// the tap-to-recapture surface — tapping a swatch only changes the
+    /// color, never starts a new take.
+    private var paletteDock: some View {
+        HStack(spacing: WoojSpace.sm) {
+            ForEach(Palette.colors, id: \.token) { c in
+                Circle()
+                    .fill(Appearance.background(c.token))
+                    .frame(width: 26, height: 26)
+                    .overlay(
+                        Circle().strokeBorder(
+                            vm.savedColorToken == c.token ? WoojColor.clay : WoojColor.line,
+                            lineWidth: vm.savedColorToken == c.token ? 2 : 1)
+                    )
+                    .onTapGesture { vm.pickColor(c.token) }
+            }
+        }
+        .padding(.horizontal, WoojSpace.md)
+        .padding(.vertical, WoojSpace.sm)
+        .background(WoojColor.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(WoojColor.line))
+        .shadow(color: WoojColor.ink.opacity(0.08), radius: 8, y: 2)
+        .animation(WoojMotion.calm.animation, value: vm.savedColorToken)
     }
 
     private var sticky: some View {
@@ -45,9 +76,13 @@ struct SavedView: View {
             }
         }
         .padding(WoojSpace.lg)
-        .background(WoojSticky.butter, in: RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous))
+        .background(
+            Appearance.background(vm.savedColorToken),
+            in: RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous)
+        )
         .shadow(color: WoojColor.ink.opacity(0.08), radius: 12, y: 6)
         .frame(maxWidth: WoojMeasure.reading * 10)
+        .animation(WoojMotion.calm.animation, value: vm.savedColorToken)
     }
 
     private var hint: some View {

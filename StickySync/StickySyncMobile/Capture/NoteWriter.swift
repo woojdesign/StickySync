@@ -34,4 +34,12 @@ final class NoteWriter {
         updated.content = content
         store.update(updated)
     }
+
+    /// Replaces a note's color — used when the user taps a swatch on the
+    /// SavedView before the polish + dismiss cycle completes.
+    func update(_ note: Note, colorToken: String) {
+        var updated = note
+        updated.colorToken = colorToken
+        store.update(updated)
+    }
 }

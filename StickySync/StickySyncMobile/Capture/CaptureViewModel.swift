@@ -23,6 +23,10 @@ final class CaptureViewModel: ObservableObject {
     /// the saved card can show it's still polishing — not a final, possibly-wrong
     /// transcript with no recourse.
     @Published private(set) var refining = false
+    /// Color the saved sticky is showing. Defaults to slot 1; the user can
+    /// pick a different swatch on SavedView before the dismiss timer runs out,
+    /// which writes through to the persisted note.
+    @Published private(set) var savedColorToken: String = Palette.defaultToken
 
     private let recorder = AudioRecorder()
     private let speech = SpeechTranscriber()
@@ -73,6 +77,20 @@ final class CaptureViewModel: ObservableObject {
 
     func done() { Task { await finish() } }
 
+    /// User tapped a swatch on the SavedView — recolor the visible card
+    /// and write the new token through to the persisted note. Safe to call
+    /// even before the WhisperKit polish finishes; the eventual `update`
+    /// in `finish()` will preserve this color since it uses `lastNote`
+    /// which is updated below.
+    func pickColor(_ token: String) {
+        savedColorToken = token
+        guard let note = lastNote else { return }
+        var updated = note
+        updated.colorToken = token
+        lastNote = updated
+        writer.update(note, colorToken: token)
+    }
+
     func cancel() {
         stopEngines()
         reset()
@@ -105,6 +123,7 @@ final class CaptureViewModel: ObservableObject {
         }
 
         partialText = ""; elapsed = 0; lastNote = nil; refining = false
+        savedColorToken = Palette.defaultToken
         // Load the WhisperKit model while the user talks, so the final pass is
         // ready the instant they stop.
         finalizer.prewarm()
@@ -153,7 +172,10 @@ final class CaptureViewModel: ObservableObject {
             && refinedWords >= max(3, Int(Double(fastWords) * 0.6))
         if isImprovement {
             savedText = refined
-            if let written { writer.update(written, content: refined) }
+            // Use `lastNote` (which may carry a swatch the user tapped on
+            // SavedView mid-polish), not the original `written` snapshot —
+            // otherwise the content update would silently revert the color.
+            if let current = lastNote { writer.update(current, content: refined) }
         }
         refining = false
     }
