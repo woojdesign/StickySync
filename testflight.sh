@@ -72,6 +72,23 @@ else
 fi
 [ -f "$NOTES_FILE" ] || { echo "error: $NOTES_FILE missing"; exit 1; }
 
+# xcodebuild's `-allowProvisioningUpdates` needs to authenticate to Apple
+# to fetch a fresh distribution provisioning profile. The default auth
+# path is the *keychain* (a signed-in Apple ID + cached tokens), which
+# can quietly break — keychain rotations, token timeouts, Xcode sign-
+# outs we never asked for. Pass the same App Store Connect API key the
+# upload step uses so the auth path is single-rooted: if `altool` can
+# upload, `xcodebuild` can sign. Required env: ASC_KEY_ID, ASC_ISSUER_ID,
+# ASC_KEY_PATH (see CLAUDE.md).
+ASC_XCODE_AUTH=()
+if [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] && [ -n "${ASC_KEY_PATH:-}" ]; then
+    ASC_XCODE_AUTH=(
+        -authenticationKeyID "$ASC_KEY_ID"
+        -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+        -authenticationKeyPath "$ASC_KEY_PATH"
+    )
+fi
+
 # --- 2. archive -------------------------------------------------------------
 echo "==> Clean + archive (build $BUILD_NUMBER, version $VERSION)"
 rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
@@ -82,6 +99,7 @@ xcodebuild archive \
     -destination "generic/platform=iOS" \
     -archivePath "$ARCHIVE" \
     -allowProvisioningUpdates \
+    "${ASC_XCODE_AUTH[@]}" \
     DEVELOPMENT_TEAM="$TEAM_ID" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     MARKETING_VERSION="$VERSION"
@@ -105,7 +123,8 @@ xcodebuild -exportArchive \
     -archivePath "$ARCHIVE" \
     -exportPath "$EXPORT_DIR" \
     -exportOptionsPlist "$BUILD_DIR/ExportOptions.plist" \
-    -allowProvisioningUpdates
+    -allowProvisioningUpdates \
+    "${ASC_XCODE_AUTH[@]}"
 
 IPA="$(ls "$EXPORT_DIR"/*.ipa 2>/dev/null | head -1 || true)"
 [ -n "$IPA" ] && [ -f "$IPA" ] || { echo "error: no IPA produced in $EXPORT_DIR"; exit 1; }

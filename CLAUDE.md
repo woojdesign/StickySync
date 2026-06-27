@@ -28,7 +28,7 @@ What it does (see header of `release.sh`): polished changelog → notarize → E
 ./testflight.sh 0.3.2
 ```
 
-What it does (see header of `testflight.sh`): polished changelog → archive → export IPA → `altool` upload → poll ASC for VALID → set "What to Test" via ASC API. Last shipped: **0.7.2 (122)** as `ios/v0.7.2`.
+What it does (see header of `testflight.sh`): polished changelog → archive → export IPA → `altool` upload → poll ASC for VALID → set "What to Test" via ASC API. Last shipped: **0.7.6 (132)** as `ios/v0.7.6`.
 
 **Tag manually after a successful upload** (not yet automated):
 ```sh
@@ -64,11 +64,11 @@ Most of this is already done on Sean's main Mac. Recreate if you're on a fresh s
 - **GitHub**: `gh auth login` for `woojdesign`.
 - **App Store Connect API**: Team Key from ASC → Users and Access → Integrations. Three values in `~/.zshrc`:
   ```
-  export ASC_KEY_ID=CX7TU73U7D
+  export ASC_KEY_ID=R2874DGSGN
   export ASC_ISSUER_ID=aaea5e06-a424-4055-81b4-49f47d252adb
-  export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_CX7TU73U7D.p8"
+  export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_R2874DGSGN.p8"
   ```
-  The `.p8` is one-time-downloadable from Apple; back it up. The current key has **App Manager** role on team BSPX8X9U4B.
+  The `.p8` is one-time-downloadable from Apple; back it up. The current key has **Admin** role on team BSPX8X9U4B — required for `xcodebuild -allowProvisioningUpdates` to regenerate provisioning profiles via API. (The previous CX7TU73U7D key had App Manager — works for upload but not for profile regeneration, which is what caused the 0.7.6 ship to fail until the role was upgraded.)
 - **ASC Python deps**: venv at `~/.venvs/stickysync` with `PyJWT cryptography requests`. `testflight.sh` reads `$ASC_PYTHON` (defaults to that venv's python3).
 
 ## Gotchas — read before debugging these
