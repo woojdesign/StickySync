@@ -266,6 +266,21 @@ final class MarkdownUITextView: UITextView {
 
     // MARK: - Paste
 
+    /// Tell UIKit's edit-menu / long-press-menu validator that we can
+    /// consume an image-only pasteboard. Without this, when the user
+    /// taps Copy on a photo and long-presses our text field, only
+    /// "AutoFill" shows — no Paste — and our `paste(_:)` override
+    /// never even gets called.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)),
+           attachmentContext?.noteID != nil,
+           attachmentContext?.noteStore != nil,
+           UIPasteboard.general.hasImages {
+            return true
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
     /// Paste intercept. When the pasteboard carries an image, upload the
     /// bytes through NotesKit and insert a Markdown reference at the cursor.
     /// Anything else (text, URLs, …) falls through to the default behavior.
