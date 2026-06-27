@@ -96,6 +96,33 @@ final class MarkdownNSTextView: NSTextView {
 
     // MARK: - Paste
 
+    /// Tell NSTextView's Edit-menu validator that we know how to consume
+    /// image pasteboard types — without this, the system grays out Paste
+    /// when the clipboard holds *only* an image (e.g. a `⌘⇧4` screenshot),
+    /// and `paste(_:)` never even gets called.
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.readablePasteboardTypes + [
+            NSPasteboard.PasteboardType("public.png"),
+            NSPasteboard.PasteboardType("public.jpeg"),
+            NSPasteboard.PasteboardType("public.heic"),
+            .tiff,
+            .png
+        ]
+    }
+
+    /// Drag-drop equivalent of `readablePasteboardTypes` — let the user drop
+    /// an image file directly onto the note's text area.
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+        super.acceptableDragTypes + [
+            NSPasteboard.PasteboardType("public.png"),
+            NSPasteboard.PasteboardType("public.jpeg"),
+            NSPasteboard.PasteboardType("public.heic"),
+            .tiff,
+            .png,
+            .fileURL
+        ]
+    }
+
     /// Paste intercept. When the pasteboard carries an image, upload through
     /// NotesKit and insert a Markdown reference. Anything else falls through
     /// to the default behavior (text, RTF, etc.).
