@@ -214,6 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.onShowAIConfig = { [weak self] in self?.showMCPConfigWindow() }
         controller.isAIAccessEnabled = { MCPSettings.shared.isEnabled }
+        controller.onTidyStickies = { [weak self] in self?.tidyStickies() }
+        controller.onArrangeInGrid = { [weak self] in self?.arrangeInGrid() }
         controller.isNoteOpen = { [weak self] id in self?.controllers[id] != nil }
         statusItemController = controller
     }
@@ -340,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewItem.submenu = viewMenu
         viewMenu.addItem(themeMainMenuItem())
 
-        // MARK: Window (standard)
+        // MARK: Window (standard + arrange)
         let windowItem = NSMenuItem()
         mainMenu.addItem(windowItem)
         let windowMenu = NSMenu(title: "Window")
@@ -352,6 +354,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowMenu.addItem(.separator())
         windowMenu.addItem(withTitle: "Bring All to Front",
                            action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        addItem(to: windowMenu, "Tidy Stickies", #selector(tidyStickies), "")
+        addItem(to: windowMenu, "Arrange in Grid", #selector(arrangeInGrid), "")
         NSApp.windowsMenu = windowMenu
 
         // MARK: Help
@@ -454,6 +459,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showAIConfigFromMenu() {
         showMCPConfigWindow()
+    }
+
+    @objc private func tidyStickies() {
+        ArrangeStickies.tidy(Array(controllers.values))
+    }
+
+    @objc private func arrangeInGrid() {
+        ArrangeStickies.grid(Array(controllers.values))
     }
 
     @objc private func showWhatsNewFromMenu() {

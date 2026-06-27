@@ -14,6 +14,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Claude Code / Cursor / etc. Only relevant when AI access is on.
     var onShowAIConfig: (() -> Void)?
     var isAIAccessEnabled: (() -> Bool)?
+    var onTidyStickies: (() -> Void)?
+    var onArrangeInGrid: (() -> Void)?
 
     private let store: NoteStore
     private let statusItem: NSStatusItem
@@ -143,6 +145,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(syncItem)
 
         menu.addItem(.separator())
+        let tidy = NSMenuItem(title: "Tidy Stickies",
+                              action: #selector(tidyStickiesTapped), keyEquivalent: "")
+        tidy.target = self
+        menu.addItem(tidy)
+        let arrangeGrid = NSMenuItem(title: "Arrange in Grid",
+                                     action: #selector(arrangeInGridTapped), keyEquivalent: "")
+        arrangeGrid.target = self
+        menu.addItem(arrangeGrid)
+
+        menu.addItem(.separator())
         menu.addItem(themeSubmenu())
         let whatsNew = NSMenuItem(title: "What’s new in StickySync",
                                   action: #selector(showWhatsNew),
@@ -202,6 +214,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let note = ReleaseNotes.dropLatest(into: store) else { return }
         onShowWhatsNew?(note)
     }
+
+    @objc private func tidyStickiesTapped() { onTidyStickies?() }
+    @objc private func arrangeInGridTapped() { onArrangeInGrid?() }
 
     /// "Theme" submenu — one entry per bundled theme with a checkmark next to
     /// the active one. Picking flips `ThemeStore.shared`, which posts
