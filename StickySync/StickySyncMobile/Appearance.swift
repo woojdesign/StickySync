@@ -50,24 +50,48 @@ enum Appearance {
     }
 
     /// UIFont equivalent for use with UIKit-backed editors (Markdown wrapper).
+    /// Applies the platform-convention scale so `note.fontSize` matches its
+    /// perceived weight across Mac and iPhone — see `iosReadingSize(_:)`.
     static func uiFont(_ id: String, size: CGFloat) -> UIFont {
+        let scaled = iosReadingSize(size)
         switch FontCatalog.option(for: id).kind {
         case .system:
-            return .systemFont(ofSize: size)
+            return .systemFont(ofSize: scaled)
         case .rounded:
-            let base = UIFont.systemFont(ofSize: size)
+            let base = UIFont.systemFont(ofSize: scaled)
             if let d = base.fontDescriptor.withDesign(.rounded) {
-                return UIFont(descriptor: d, size: size)
+                return UIFont(descriptor: d, size: scaled)
             }
             return base
         case .serif:
-            return UIFont(name: WoojType.reading.family, size: size) ?? .systemFont(ofSize: size)
+            return UIFont(name: WoojType.reading.family, size: scaled) ?? .systemFont(ofSize: scaled)
         case .monospaced:
-            return .monospacedSystemFont(ofSize: size, weight: .regular)
+            return .monospacedSystemFont(ofSize: scaled, weight: .regular)
         case .named(let name):
-            return UIFont(name: name, size: size) ?? .systemFont(ofSize: size)
+            return UIFont(name: name, size: scaled) ?? .systemFont(ofSize: scaled)
         }
     }
+
+    /// Convert a `note.fontSize` (the cross-platform "logical" size the
+    /// note carries on disk and in CloudKit) into the size we actually
+    /// render at on iPhone. Mac uses the logical size 1:1; iOS multiplies
+    /// because the platforms have different reading-distance conventions:
+    ///
+    /// - macOS body text convention: ~13pt at typical screen distance
+    ///   (50cm), so a 15pt note reads comfortably "above body."
+    /// - iOS body text convention: ~17pt at typical hold distance
+    ///   (~30cm), so the SAME 15pt note read on iPhone feels too small.
+    ///
+    /// A 1.2x scale lifts the default 15pt to 18pt — squarely in iOS
+    /// body territory — and preserves the user's relative bigger/smaller
+    /// adjustments (12 → 14.4, 18 → 21.6, 24 → 28.8). Applied at the
+    /// render boundary, not stored on the note, so the synced size stays
+    /// platform-agnostic.
+    static func iosReadingSize(_ logical: CGFloat) -> CGFloat {
+        logical * iosReadingScale
+    }
+
+    static let iosReadingScale: CGFloat = 1.2
 }
 
 extension UIColor {
