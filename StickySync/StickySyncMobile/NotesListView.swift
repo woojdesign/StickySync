@@ -190,7 +190,9 @@ struct NotesListView: View {
     /// One card with its tap target + context menu attached. Extracted from
     /// the row loop so the body stays scannable.
     @ViewBuilder private func cardWithGestures(_ note: Note) -> some View {
-        NoteCard(note: note, isShared: model.sharedNoteIDs.contains(note.id))
+        NoteCard(note: note,
+                 isShared: model.sharedNoteIDs.contains(note.id),
+                 store: model.sharedStore)
             .onTapGesture { editing = note }
             .contextMenu {
                 Button { UIPasteboard.general.string = note.content } label: {
@@ -293,19 +295,33 @@ private struct SearchField: View {
 private struct NoteCard: View {
     let note: Note
     var isShared: Bool = false
+    let store: NoteStore
     /// SwiftUI skips re-running body when a struct's stored props are
     /// unchanged. `note` doesn't change on a theme switch — only the
     /// resolution of its `colorToken` does — so the card has to observe
     /// the theme directly to know its body should re-run.
     @ObservedObject private var theme = ThemeStore.shared
+    /// Pre-resolved first-attachment thumbnail. Loaded on `.task` so the
+    /// card body doesn't block on Core Data + thumbnail decode during
+    /// each scroll re-layout.
+    @State private var thumb: UIImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WoojSpace.md) {
+            if let thumb {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 90)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: WoojRadius.md, style: .continuous))
+            }
             Text(preview)
                 .font(.custom(WoojType.reading.family, size: 16))
                 .foregroundStyle(WoojColor.reading)
                 .lineSpacing(3)
-                .lineLimit(5)
+                .lineLimit(thumb == nil ? 5 : 3)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             Spacer(minLength: WoojSpace.xs)
@@ -322,6 +338,19 @@ private struct NoteCard: View {
                 }
             }
         }
+        .task(id: note.id) {
+            // Picks the first non-deleted attachment as the cover. Later we
+            // could honor an explicit "cover" flag, but first-paste-wins is
+            // the right default for an inline-paste editor.
+            let attachments = store.attachments(for: note.id)
+            guard let first = attachments.first(where: { !$0.isDeleted }),
+                  let data = store.thumbnailData(for: first.id) ?? store.imageData(for: first.id),
+                  let img = UIImage(data: data) else {
+                if thumb != nil { thumb = nil }
+                return
+            }
+            thumb = img
+        }
         .frame(minHeight: 120, alignment: .topLeading)
         .padding(WoojSpace.md)
         .background(
@@ -336,8 +365,16 @@ private struct NoteCard: View {
     }
 
     private var preview: String {
-        let raw = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if raw.isEmpty { return "New note" }
+        // Strip image references (`![alt](attachment://UUID)`) — the cover
+        // thumbnail above already shows the image; the alt text is enough
+        // here, the URL is just visual noise.
+        let withoutImages = note.content.replacingOccurrences(
+            of: #"!\[([^\]]*)\]\(attachment://[^\)]+\)"#,
+            with: "$1",
+            options: .regularExpression
+        )
+        let raw = withoutImages.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty { return thumb == nil ? "New note" : "" }
         var lines: [String] = []
         for rawLine in raw.components(separatedBy: "\n") {
             let line = Self.stripPreviewMarkers(rawLine)
