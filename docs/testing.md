@@ -157,6 +157,32 @@ Counters we adopt:
    pattern-matching on the status code and skipping the message; the
    discipline is to read the *exact text* every time.
 
+7. **`xcodebuild test` green is not "the app works." Launch it.**
+   Tests render views in isolation and exercise the model layer with
+   in-memory stores. They do *not* exercise the real launch path —
+   AppDelegate.applicationDidFinishLaunching, store init, deferred
+   `DispatchQueue.main.async` blocks scheduled during processEditing,
+   the open-windows sequence for the user's actual data. The first
+   time I treated "tests pass" as ship-ready, an attachment-shrink
+   race in MarkdownTextStorage's deferred invalidation crashed 0.7.3
+   on launch — and the entire test suite never touched the code path.
+
+   **For any non-trivial Mac change, before pushing a public version
+   bump:** build the Debug app, launch it, watch it stay alive for
+   ~5s, exercise the affected surface (open a note, switch a theme,
+   tap a menu item — whatever the change touches), then quit cleanly.
+   This catches the "compiled fine, tested fine, dies in
+   `applicationDidFinishLaunching`" class. Cheap to do; embarrassing
+   not to.
+
+   For iOS, the simulator launch is the equivalent. `xcrun simctl
+   install` + `simctl launch` + wait + check the process.
+
+   Where this still has gaps: schemes the local dev environment can't
+   exercise (CloudKit sync with a second device, the share landing
+   page, etc.) — those still need a manual run. The smoke checklist
+   below is where those live.
+
 ## What lands on the CI checklist next
 
 In rough order:

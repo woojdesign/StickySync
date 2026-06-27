@@ -135,7 +135,7 @@ public final class MarkdownTextStorage: NSTextStorage {
     /// each with a single `\u{FFFC}` carrying the inline image attachment +
     /// the source-attribute round-trip metadata. Idempotent — re-scanning
     /// after a substitution is a no-op because the matched runs are gone.
-    ///
+    ///#imageLiteral(resourceName: "simulator_screenshot_464954B8-C389-4CBE-84F0-D25463D95398.png")
     /// Call after any `replaceCharacters(in:with:)` that inserts new
     /// Markdown source (the initial load + any external content sync).
     public func substituteAttachmentReferences() {
@@ -307,14 +307,30 @@ public final class MarkdownTextStorage: NSTextStorage {
         // edit-notification path; only the surrounding line's styling
         // catches up a frame later).
         let managers = layoutManagers
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // Re-clamp `touched` to the current backing length. Between
+            // this processEditing capturing the range and the async block
+            // running, *another* edit can have shrunk the storage —
+            // typically `substituteAttachmentReferences()`, which collapses
+            // each `![](attachment://UUID)` source span into a single FFFC
+            // character. Calling `invalidateGlyphs(forCharacterRange:)`
+            // with a stale (too-large) range crashes inside AppKit's
+            // `_extendedCharRangeForInvalidation` (it peeks past the
+            // range edge to find a paragraph boundary, and reads off the
+            // end of the now-shrunk NSString).
+            let currentLength = self.backing.length
+            let clampedLoc = min(touched.location, currentLength)
+            let clampedLen = min(touched.length, currentLength - clampedLoc)
+            guard clampedLen > 0 else { return }
+            let safe = NSRange(location: clampedLoc, length: clampedLen)
             for manager in managers {
                 var actual = NSRange(location: NSNotFound, length: 0)
-                manager.invalidateGlyphs(forCharacterRange: touched,
+                manager.invalidateGlyphs(forCharacterRange: safe,
                                          changeInLength: 0,
                                          actualCharacterRange: &actual)
-                manager.invalidateLayout(forCharacterRange: touched, actualCharacterRange: &actual)
-                manager.invalidateDisplay(forCharacterRange: touched)
+                manager.invalidateLayout(forCharacterRange: safe, actualCharacterRange: &actual)
+                manager.invalidateDisplay(forCharacterRange: safe)
             }
         }
     }
