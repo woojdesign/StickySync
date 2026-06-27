@@ -28,6 +28,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Under XCTest / Swift Testing the host app is launched as a test
+        // runner; the production launch path (CloudKit container init,
+        // status item, welcome sticky, release-sticky drop, window
+        // restoration) isn't what we want there and frequently crashes
+        // because test environments don't carry the iCloud entitlement.
+        // Xcode sets this env var when running tests; bail before the
+        // heavy work and let the test runner take over.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
+
         buildMenu()
         setupStatusItem()
 
