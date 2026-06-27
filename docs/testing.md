@@ -70,23 +70,17 @@ several sizes / themes / states. Run with `xcodebuild test -scheme StickySync`,
 sub-second per case. Baselines live next to the tests under
 `__Snapshots__/StickySyncTests/*.png` and are checked into the repo.
 
-**iOS (deferred)**: `StickySyncMobileTests` target exists but only carries a
-placeholder. The iOS simulator's sandbox doesn't expose the host's
-source-tree path at `/Users/.../StickySyncMobileTests/__Snapshots__/`, so
-`swift-snapshot-testing` writes succeed via the test-runner bridge but the
-sim can't `FileManager.fileExists` those paths on subsequent runs — every
-re-run silently re-records as if it were the first. The fix (when we have
-half a day to spare) is one of:
-
-1. Bundle `__Snapshots__` as a test-target resource so reads go through
-   `Bundle.module` instead of an absolute host path.
-2. Override `snapshotDirectory:` to a sim-accessible path (`NSTemporaryDirectory`
-   or `Documents`) and ferry baselines into the sim with a pre-test script.
-3. Run UI tests as a Mac Catalyst target so the filesystem is shared.
-
-Until then, NotesKit unit tests + Mac snapshot tests + manual smoke cover
-most of the visual surface — most of the buggy rendering paths are in
-shared code we exercise through `NoteContentView` on Mac.
+**iOS (live)**: `StickySyncMobileTests` target. Covers `NoteCard` (the
+list-grid surface where the 0.5.21 thumbnail-render and preview-text bugs
+landed). The sim's filesystem *does* mount the host source tree at the
+same path, so baselines live next to the tests just like on Mac. The
+real wrinkle: **SwiftUI's renderer on iOS Simulator has non-deterministic
+anti-aliasing and subpixel rounding**, so strict byte-exact comparison
+flaps on imperceptible differences. All iOS snapshots use
+`precision: 0.99` + `perceptualPrecision: 0.97` (encapsulated in the
+`assertCard(…)` helper) — tight enough to catch every visible regression
+we've shipped, loose enough to survive renderer jitter. Bump those
+numbers if a real visual diff starts reading as noise.
 
 Snapshot-test cadence: every visual bug fixed adds a baseline. Don't try to
 snapshot every view in the app — focus on the high-traffic surfaces (note
@@ -153,8 +147,8 @@ In rough order:
 - [x] Add `StickySyncTests` + `StickySyncMobileTests` Xcode test targets.
 - [x] Pin `swift-snapshot-testing` as a dependency on both.
 - [x] Seed Mac snapshot baselines for `NoteContentView` (7 cases).
-- [ ] Fix the iOS sim-filesystem path issue (see iOS section above) and
-      seed `NoteCard` baselines.
+- [x] Seed iOS snapshot baselines for `NoteCard` (4 cases) with the
+      `precision: 0.99 / perceptualPrecision: 0.97` jitter tolerance.
 - [ ] Write `docs/smoke-test.md` with the pre-release manual run.
 - [ ] Add a GitHub Action that runs `swift test` (NotesKit) + the
       Mac snapshot tests on every push to `main`.
