@@ -45,6 +45,15 @@ ZIP="build/StickySync-$VERSION-$BUILD_NUMBER.zip"
 DMG="build/StickySync-$VERSION.dmg"
 rm -f "$DMG"
 if command -v create-dmg >/dev/null; then
+    # Stage just the .app in a clean folder. `xcodebuild -exportArchive`
+    # drops `ExportOptions.plist` / `DistributionSummary.plist` /
+    # `Packaging.log` next to the app, and create-dmg would include
+    # everything in its source dir — leaving stray plists visible in
+    # the mounted DMG window.
+    DMG_STAGE="build/dmg-stage"
+    rm -rf "$DMG_STAGE" && mkdir -p "$DMG_STAGE"
+    cp -R "build/export/StickySync.app" "$DMG_STAGE/"
+
     echo "==> Build DMG with drag-to-Applications layout"
     create-dmg \
         --volname "StickySync" \
@@ -55,7 +64,7 @@ if command -v create-dmg >/dev/null; then
         --hide-extension "StickySync.app" \
         --no-internet-enable \
         "$DMG" \
-        "build/export/" \
+        "$DMG_STAGE" \
         >/dev/null
 
     echo "==> Notarize DMG"
