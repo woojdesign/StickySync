@@ -20,10 +20,12 @@ import Foundation
 import AppKit
 public typealias PlatformFont = NSFont
 public typealias PlatformColor = NSColor
+public typealias PlatformImage = NSImage
 #elseif canImport(UIKit)
 import UIKit
 public typealias PlatformFont = UIFont
 public typealias PlatformColor = UIColor
+public typealias PlatformImage = UIImage
 #endif
 
 public final class MarkdownTextStorage: NSTextStorage {
@@ -49,6 +51,16 @@ public final class MarkdownTextStorage: NSTextStorage {
     public var markerColor: PlatformColor {
         didSet { restyleAll() }
     }
+
+    /// Resolves an attachment UUID to its rendered image. Set by the host
+    /// view (`MarkdownTextView` / `NoteContentView`) to bridge into the
+    /// NotesKit store. The substitution pass uses this to hydrate inline
+    /// `NSTextAttachment` images at parse time.
+    public var attachmentLoader: ((UUID) -> PlatformImage?)?
+
+    /// Max pixel width an inline image may render at. Smaller images
+    /// keep their natural size; anything wider gets scaled to fit.
+    public var attachmentMaxWidth: CGFloat = 320
 
     /// Paragraph range containing the current cursor / selection. Hideable
     /// inline markers OUTSIDE this range get faded to a much-dimmer color
@@ -86,6 +98,159 @@ public final class MarkdownTextStorage: NSTextStorage {
     // MARK: - NSTextStorage primitives
 
     public override var string: String { backing.string }
+
+    // MARK: - Source-faithful round-trip
+    //
+    // Inline images live as `\u{FFFC}` (NSAttachmentCharacter) in `backing`,
+    // tagged with `.markdownAttachmentSource` carrying the original
+    // `![alt](attachment://UUID)` text. The editor's binding always sees the
+    // *expanded* Markdown form, so what NotesKit persists stays portable.
+
+    /// Expanded Markdown — replaces every attachment FFFC with its stored
+    /// `.markdownAttachmentSource` text. Use this (not `string`) when handing
+    /// content back to the binding or to NotesKit.
+    public var sourceString: String {
+        var out = ""
+        let full = NSRange(location: 0, length: backing.length)
+        let raw = backing.string as NSString
+        var cursor = 0
+        backing.enumerateAttribute(.markdownAttachmentSource, in: full, options: []) { value, range, _ in
+            if range.location > cursor {
+                out += raw.substring(with: NSRange(location: cursor, length: range.location - cursor))
+            }
+            if let source = value as? String {
+                out += source
+            } else {
+                out += raw.substring(with: range)
+            }
+            cursor = range.upperBound
+        }
+        if cursor < raw.length {
+            out += raw.substring(with: NSRange(location: cursor, length: raw.length - cursor))
+        }
+        return out
+    }
+
+    /// Walk `backing` for `![alt](attachment://UUID)` patterns and replace
+    /// each with a single `\u{FFFC}` carrying the inline image attachment +
+    /// the source-attribute round-trip metadata. Idempotent — re-scanning
+    /// after a substitution is a no-op because the matched runs are gone.
+    ///
+    /// Call after any `replaceCharacters(in:with:)` that inserts new
+    /// Markdown source (the initial load + any external content sync).
+    public func substituteAttachmentReferences() {
+        let pattern = try! NSRegularExpression(
+            pattern: #"!\[([^\]]*)\]\(attachment://([0-9a-fA-F\-]+)\)"#,
+            options: []
+        )
+        let full = NSRange(location: 0, length: backing.length)
+        let matches = pattern.matches(in: backing.string, options: [], range: full)
+        // Walk back-to-front so prior offsets stay valid as we replace.
+        for match in matches.reversed() {
+            guard match.numberOfRanges == 3 else { continue }
+            let altRange = match.range(at: 1)
+            let uuidRange = match.range(at: 2)
+            let source = (backing.string as NSString).substring(with: match.range)
+            let altText = (backing.string as NSString).substring(with: altRange)
+            let uuidString = (backing.string as NSString).substring(with: uuidRange)
+            guard let uuid = UUID(uuidString: uuidString) else { continue }
+            substituteAttachment(at: match.range,
+                                 source: source,
+                                 altText: altText,
+                                 attachmentID: uuid)
+        }
+    }
+
+    /// Insert a fresh attachment placeholder at `location` — used by the
+    /// paste handler after it has uploaded the image bytes to NotesKit.
+    /// The caller has the UUID and the image already; we just need to
+    /// stitch in the FFFC + attributes.
+    public func insertAttachment(id: UUID,
+                                 altText: String,
+                                 image: PlatformImage,
+                                 at location: Int) {
+        let source = "![\(altText)](attachment://\(id.uuidString))"
+        let placeholder = "\u{FFFC}"
+        beginEditing()
+        backing.replaceCharacters(in: NSRange(location: location, length: 0), with: placeholder)
+        let placeholderRange = NSRange(location: location, length: 1)
+        applyAttachmentAttributes(in: placeholderRange,
+                                  source: source,
+                                  attachmentID: id,
+                                  image: image)
+        edited(.editedCharacters, range: NSRange(location: location, length: 0),
+               changeInLength: 1)
+        edited(.editedAttributes, range: placeholderRange, changeInLength: 0)
+        endEditing()
+    }
+
+    /// Replace a `![alt](attachment://UUID)` source span with the
+    /// FFFC placeholder and re-add the typing attributes. Called by
+    /// `substituteAttachmentReferences()` after parsing.
+    private func substituteAttachment(at range: NSRange,
+                                      source: String,
+                                      altText: String,
+                                      attachmentID: UUID) {
+        let placeholder = "\u{FFFC}"
+        beginEditing()
+        backing.replaceCharacters(in: range, with: placeholder)
+        let placeholderRange = NSRange(location: range.location, length: 1)
+        let image = attachmentLoader?(attachmentID)
+        applyAttachmentAttributes(in: placeholderRange,
+                                  source: source,
+                                  attachmentID: attachmentID,
+                                  image: image)
+        // Re-emit edits so the layout manager re-flows. The character delta
+        // is negative (FFFC is one char; source was many).
+        edited(.editedCharacters, range: range, changeInLength: 1 - range.length)
+        edited(.editedAttributes, range: placeholderRange, changeInLength: 0)
+        endEditing()
+    }
+
+    /// Set the NSTextAttachment + round-trip metadata for an FFFC at
+    /// `range` (must be length 1). When `image` is nil — the attachment
+    /// hasn't downloaded yet — we draw a sized placeholder so the layout
+    /// reserves the space.
+    private func applyAttachmentAttributes(in range: NSRange,
+                                           source: String,
+                                           attachmentID: UUID,
+                                           image: PlatformImage?) {
+        let attachment = NSTextAttachment()
+        if let image {
+            attachment.image = image
+            let scaled = scaledBounds(for: image, maxWidth: attachmentMaxWidth)
+            attachment.bounds = scaled
+        } else {
+            // Placeholder until the loader returns. 200x140 reads as "image
+            // here" without being a tiny dot.
+            attachment.bounds = CGRect(x: 0, y: 0, width: 200, height: 140)
+        }
+        var attrs: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: textColor,
+            .attachment: attachment,
+            .markdownAttachmentSource: source,
+            .markdownAttachmentID: attachmentID
+        ]
+        // Attachments interact poorly with paragraph styles meant for body
+        // text (e.g. `paragraphSpacingBefore`). Default paragraph keeps them
+        // breathing without inheriting list indents from the surrounding text.
+        attrs[.paragraphStyle] = NSParagraphStyle.default
+        backing.setAttributes(attrs, range: range)
+    }
+
+    private func scaledBounds(for image: PlatformImage,
+                              maxWidth: CGFloat) -> CGRect {
+        #if canImport(AppKit)
+        let imgSize = image.size
+        #else
+        let imgSize = image.size
+        #endif
+        let scale = min(1.0, maxWidth / max(imgSize.width, 1))
+        let w = imgSize.width * scale
+        let h = imgSize.height * scale
+        return CGRect(x: 0, y: 0, width: w, height: h)
+    }
 
     public override func attributes(at location: Int,
                                     effectiveRange range: NSRangePointer?) -> [NSAttributedString.Key: Any] {

@@ -35,6 +35,14 @@ public extension NSAttributedString.Key {
     /// this tag at parse time. List markers (`- `, `* `) are NOT tagged —
     /// they're the visual bullet itself, never hidden.
     static let markdownHideableMarker = NSAttributedString.Key("markdownHideableMarker")
+    /// Marks a single `\u{FFFC}` (NSAttachmentCharacter) that stands in for
+    /// an image-Markdown reference. Value is the original Markdown text
+    /// (`![alt](attachment://UUID)`) so the source-faithful round-trip
+    /// can re-expand the FFFC when reading the binding back out.
+    static let markdownAttachmentSource = NSAttributedString.Key("markdownAttachmentSource")
+    /// Companion to `markdownAttachmentSource`: the parsed attachment UUID,
+    /// so the loader can fetch bytes without re-parsing the source string.
+    static let markdownAttachmentID = NSAttributedString.Key("markdownAttachmentID")
 }
 
 public final class MarkdownLayoutManager: NSLayoutManager {
