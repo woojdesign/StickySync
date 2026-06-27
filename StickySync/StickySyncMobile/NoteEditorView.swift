@@ -38,7 +38,9 @@ struct NoteEditorView: View {
                     // Per-slot text color (resolved through the current theme)
                     // so a saturated theme can ride white-on-punch, etc.
                     textColor: Appearance.uiText(note.colorToken),
-                    tintColor: UIColor(WoojColor.clay)
+                    tintColor: UIColor(WoojColor.clay),
+                    noteID: note.id,
+                    noteStore: model.sharedStore as AnyObject
                 )
                 .padding(.horizontal, WoojSpace.lg)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
