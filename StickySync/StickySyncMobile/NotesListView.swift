@@ -338,7 +338,11 @@ private struct NoteCard: View {
                 }
             }
         }
-        .task(id: note.id) {
+        // Re-fire the cover lookup whenever the note's body changes — e.g.
+        // the user just pasted an image inside the editor and returned to
+        // the list. Keying on `note.id` alone never re-runs, so the card
+        // would stay blank until the app relaunched.
+        .task(id: "\(note.id)|\(note.modifiedAt.timeIntervalSince1970)|\(note.content.count)") {
             // Picks the first non-deleted attachment as the cover. Later we
             // could honor an explicit "cover" flag, but first-paste-wins is
             // the right default for an inline-paste editor.
