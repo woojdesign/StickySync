@@ -15,6 +15,17 @@ struct StickySyncApp: App {
     // across all of your devices.
     @StateObject private var model = NotesModel(store: NoteStoreProvider.shared)
 
+    init() {
+        // Drop a "what's new in X.Y.0" release sticky if we've crossed a
+        // minor/major bump since the last launch. Patch versions don't
+        // surface; fresh installs treat current as seen.
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        MainActor.assumeIsolated {
+            ReleaseNotes.dropStickyIfNeeded(into: NoteStoreProvider.shared,
+                                            currentVersion: version)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             NotesListView()

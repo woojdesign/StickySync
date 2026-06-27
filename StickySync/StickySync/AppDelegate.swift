@@ -50,6 +50,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.reconcileWindows() }
         }
 
+        // Drop a "what's new in X.Y.0" release sticky if we've crossed a
+        // minor/major bump since the last launch. Patch versions don't
+        // surface; fresh installs treat current as seen.
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        let preCount = store.allNotes().count
+        ReleaseNotes.dropStickyIfNeeded(into: store, currentVersion: currentVersion)
+        // Open any new release stickies the drop just inserted, otherwise
+        // they'd sit in the All-Notes list invisibly until the user goes
+        // looking. The launch loop above only opened pre-existing notes.
+        if store.allNotes().count > preCount {
+            for note in store.allNotes() where !store.isHidden(note.id)
+                && !controllers.keys.contains(note.id) {
+                openWindow(for: note, focus: false)
+            }
+        }
+
         NSApp.activate(ignoringOtherApps: true)
     }
 

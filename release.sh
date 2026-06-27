@@ -39,7 +39,35 @@ BUILD_NUMBER="$(git rev-list --count HEAD)"
 ZIP="build/StickySync-$VERSION-$BUILD_NUMBER.zip"
 [ -f "$ZIP" ] || { echo "error: expected $ZIP from notarize.sh"; exit 1; }
 
-# 3. EdDSA-sign the update + build the appcast (private key read from keychain).
+# 3. Build a notarized DMG with a drag-to-Applications layout — the friend-
+#    facing first-install download. Sparkle keeps using the zip for updates.
+#    Skipped silently if `create-dmg` (brew) isn't installed.
+DMG="build/StickySync-$VERSION.dmg"
+rm -f "$DMG"
+if command -v create-dmg >/dev/null; then
+    echo "==> Build DMG with drag-to-Applications layout"
+    create-dmg \
+        --volname "StickySync" \
+        --window-size 540 360 \
+        --icon-size 128 \
+        --icon "StickySync.app" 140 180 \
+        --app-drop-link 400 180 \
+        --hide-extension "StickySync.app" \
+        --no-internet-enable \
+        "$DMG" \
+        "build/export/" \
+        >/dev/null
+
+    echo "==> Notarize DMG"
+    xcrun notarytool submit "$DMG" \
+        --keychain-profile "StickySync-notary" \
+        --wait
+    xcrun stapler staple "$DMG"
+else
+    echo "warn: create-dmg not installed (brew install create-dmg) — skipping DMG"
+fi
+
+# 4. EdDSA-sign the update + build the appcast (private key read from keychain).
 GEN_APPCAST="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type f -name generate_appcast -path '*artifacts/sparkle*' 2>/dev/null | head -1)"
 [ -n "$GEN_APPCAST" ] || { echo "error: Sparkle's generate_appcast not found"; exit 1; }
 
@@ -55,6 +83,13 @@ echo "==> Signing update + generating appcast"
 # picked up as a second appcast entry.
 cp "$RELEASES/$(basename "$ZIP")" "$RELEASES/StickySync.zip"
 
+# Drop the notarized DMG in the releases dir under a stable filename too so
+# the share landing page (and friends with a saved link) can rely on
+# .../releases/latest/download/StickySync.dmg always being the newest.
+if [ -f "$DMG" ]; then
+    cp "$DMG" "$RELEASES/StickySync.dmg"
+fi
+
 # Friend-facing release notes: polished changelog + install guide.
 cat > "$RELEASES/NOTES.md" <<EOF
 ## What's new in $VERSION
@@ -67,10 +102,10 @@ $(cat "$CHANGELOG")
 
 Requires macOS 15.6 or later.
 
-1. **Download:** [StickySync.zip](https://github.com/$REPO/releases/latest/download/StickySync.zip) — always the newest version.
-2. **Unzip** (double-click) and drag **StickySync** into your **Applications** folder.
+1. **Download:** [StickySync.dmg](https://github.com/$REPO/releases/latest/download/StickySync.dmg) — always the newest version.
+2. **Open the DMG** and drag **StickySync** into the **Applications** folder shortcut.
 3. **First launch.** macOS is cautious about apps from outside the App Store, so the first open takes a couple of extra clicks:
-   - Double-click StickySync. You'll see *"Apple could not verify…"* — click **Done** (not Move to Trash).
+   - Double-click StickySync from Applications. You'll see *"Apple could not verify…"* — click **Done** (not Move to Trash).
    - Open **System Settings → Privacy & Security**, scroll to **Security**, and next to *"StickySync was blocked…"* click **Open Anyway**, then confirm with your password or Touch ID.
    - The app is notarized by Apple — this is just macOS's standard caution for non-App-Store apps, and you only do it once.
 4. Done! StickySync lives in your **menu bar**. ⌘N = new note, ⌘L = all notes, ✕ hides a note (reopen it from the menu-bar list).
@@ -83,10 +118,16 @@ EOF
 #    appcast.xml, so the newest release's appcast is always the live feed;
 #    StickySync.zip is the stable friend-facing download.
 echo "==> Publishing GitHub release $TAG"
+RELEASE_ASSETS=(
+    "$RELEASES/$(basename "$ZIP")"
+    "$RELEASES/StickySync.zip"
+    "$RELEASES/appcast.xml"
+)
+if [ -f "$RELEASES/StickySync.dmg" ]; then
+    RELEASE_ASSETS+=("$RELEASES/StickySync.dmg")
+fi
 gh release create "$TAG" \
-    "$RELEASES/$(basename "$ZIP")" \
-    "$RELEASES/StickySync.zip" \
-    "$RELEASES/appcast.xml" \
+    "${RELEASE_ASSETS[@]}" \
     --repo "$REPO" \
     --title "StickySync $VERSION" \
     --notes-file "$RELEASES/NOTES.md"
