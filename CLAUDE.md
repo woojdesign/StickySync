@@ -20,7 +20,7 @@ Two separate flows. They share `scripts/release_notes.sh` for changelog generati
 ./release.sh 0.3.2
 ```
 
-What it does (see header of `release.sh`): polished changelog → notarize → EdDSA-sign → appcast → `gh release create`. Tag is `v0.3.2` (unprefixed, GH Release auto-creates from `gh release create`). Last shipped: **0.7.6**.
+What it does (see header of `release.sh`): polished changelog → notarize → EdDSA-sign → appcast → `gh release create`. Tag is `v0.3.2` (unprefixed, GH Release auto-creates from `gh release create`). Last shipped: **0.7.7**.
 
 ### iOS → TestFlight
 
@@ -28,7 +28,7 @@ What it does (see header of `release.sh`): polished changelog → notarize → E
 ./testflight.sh 0.3.2
 ```
 
-What it does (see header of `testflight.sh`): polished changelog → archive → export IPA → `altool` upload → poll ASC for VALID → set "What to Test" via ASC API. Last shipped: **0.7.6 (132)** as `ios/v0.7.6`.
+What it does (see header of `testflight.sh`): polished changelog → archive → export IPA → `altool` upload → poll ASC for VALID → set "What to Test" via ASC API. Last shipped: **0.7.7 (134)** as `ios/v0.7.7`.
 
 **Tag manually after a successful upload** (not yet automated):
 ```sh
