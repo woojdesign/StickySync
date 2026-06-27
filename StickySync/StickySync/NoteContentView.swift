@@ -116,11 +116,7 @@ final class NoteContentView: NSView {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.allowsUndo = true
-        // Inset has to clear the note's 14pt rounded corner radius —
-        // 12pt left/right lets long lines visibly bleed past the curve in
-        // the bottom-right and top-right. 18pt gives a hair of breathing
-        // room without making short notes feel cramped.
-        textView.textContainerInset = NSSize(width: 18, height: 4)
+        textView.textContainerInset = NSSize(width: 12, height: 4)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -289,7 +285,12 @@ final class NoteContentView: NSView {
         fontButton.frame = NSRect(x: header.bounds.width - pad - size - 6 - 24, y: cy, width: 24, height: size)
 
         scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: max(0, b.height - headerHeight))
-        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        // Do NOT set textContainer.containerSize here. textView has
+        // `widthTracksTextView = true`, which makes the container width
+        // follow the textView's content area (i.e. width minus
+        // textContainerInset on each side). Overriding it to
+        // `scrollView.contentSize.width` ignored the inset and made text
+        // wrap ~2×inset past the visible right edge — the bleed bug.
 
         // 20x20 grip in the bottom-right corner. Bigger than the 8x8
         // default resize hit zone and we own the cursor + drag tracking
