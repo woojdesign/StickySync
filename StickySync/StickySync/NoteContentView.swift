@@ -33,6 +33,10 @@ final class NoteContentView: NSView {
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
     let markdownStorage: MarkdownTextStorage
+    /// Custom resize handle in the bottom-right corner — larger and
+    /// more reliable than the borderless-window default. Reset in
+    /// `layout()`. See `ResizeGripView` at the bottom of this file.
+    var resizeGrip: ResizeGripView!
 
     var onColor: (() -> Void)?
     var onFont: (() -> Void)?
@@ -112,7 +116,11 @@ final class NoteContentView: NSView {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.allowsUndo = true
-        textView.textContainerInset = NSSize(width: 12, height: 4)
+        // Inset has to clear the note's 14pt rounded corner radius —
+        // 12pt left/right lets long lines visibly bleed past the curve in
+        // the bottom-right and top-right. 18pt gives a hair of breathing
+        // room without making short notes feel cramped.
+        textView.textContainerInset = NSSize(width: 18, height: 4)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -121,6 +129,14 @@ final class NoteContentView: NSView {
         textView.textContainer?.widthTracksTextView = true
         scrollView.documentView = textView
         addSubview(scrollView)
+
+        // A wide, reliable resize grip in the bottom-right. The default
+        // borderless-window resize hit zone is ~8x8 and clicks near the
+        // edge can pass through to whatever's behind. This is a real
+        // tracking area we own.
+        resizeGrip = ResizeGripView(frame: .zero)
+        resizeGrip.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(resizeGrip)
 
         setChromeVisible(false, animated: false)
     }
@@ -274,5 +290,83 @@ final class NoteContentView: NSView {
 
         scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: max(0, b.height - headerHeight))
         textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+
+        // 20x20 grip in the bottom-right corner. Bigger than the 8x8
+        // default resize hit zone and we own the cursor + drag tracking
+        // ourselves, so a click in the grip never falls through to
+        // whatever's behind the sticky.
+        let gripSize: CGFloat = 20
+        resizeGrip.frame = NSRect(x: b.width - gripSize, y: 0,
+                                  width: gripSize, height: gripSize)
+    }
+}
+
+/// Custom resize handle in the bottom-right of a note. Borderless windows
+/// get only a tiny 8x8 hit zone for resize, and a near-miss click in that
+/// area passes through to whatever's behind the sticky — both because the
+/// cursor changes "near" the corner without `resetCursorRects` precision,
+/// and because the underlying window doesn't always claim the event.
+///
+/// This view owns its cursor rect (so the diagonal cursor lights up
+/// exactly within bounds) and resizes the window itself in `mouseDragged`
+/// — no fallthrough, no "I clicked the resize cursor but nothing
+/// happened."
+final class ResizeGripView: NSView {
+    private var dragStartMouse: NSPoint = .zero
+    private var dragStartFrame: NSRect = .zero
+
+    override var isOpaque: Bool { false }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .crosshair)  // overwritten below
+        // .resizeRightDown isn't a public constant; load it by name.
+        if let img = NSImage(named: NSImage.Name("NSResizeNorthWestSouthEastCursor")) {
+            addCursorRect(bounds, cursor: NSCursor(image: img, hotSpot: NSPoint(x: 8, y: 8)))
+        } else {
+            // Fallback: any diagonal-ish indicator is better than the
+            // default arrow.
+            addCursorRect(bounds, cursor: .crosshair)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        dragStartMouse = NSEvent.mouseLocation
+        dragStartFrame = window.frame
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let window else { return }
+        let now = NSEvent.mouseLocation
+        let dx = now.x - dragStartMouse.x
+        let dy = now.y - dragStartMouse.y
+        let minSize = window.minSize
+        let newWidth  = max(minSize.width,  dragStartFrame.width  + dx)
+        let newHeight = max(minSize.height, dragStartFrame.height - dy)
+        // Keep top-left of the window fixed while resizing the bottom-right
+        // corner — i.e. anchor origin.y to top of original frame.
+        let originY = dragStartFrame.origin.y + dragStartFrame.height - newHeight
+        window.setFrame(NSRect(x: dragStartFrame.origin.x,
+                               y: originY,
+                               width: newWidth,
+                               height: newHeight),
+                        display: true)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // Subtle visual cue — three short hairlines in the corner so the
+        // grip is *findable*, not just behaviorally present. Matches
+        // typical Mac-app resize chevrons but quiet enough not to clutter
+        // a sticky.
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.setStrokeColor(NSColor.labelColor.withAlphaComponent(0.18).cgColor)
+        ctx.setLineWidth(1)
+        for i in 0..<3 {
+            let inset = CGFloat(4 + i * 4)
+            ctx.move(to: CGPoint(x: bounds.maxX - inset, y: bounds.minY + 4))
+            ctx.addLine(to: CGPoint(x: bounds.maxX - 4, y: bounds.minY + inset))
+        }
+        ctx.strokePath()
     }
 }
