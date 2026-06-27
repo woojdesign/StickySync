@@ -275,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let mainMenu = NSMenu()
 
+        // MARK: StickySync (app menu)
         let appItem = NSMenuItem()
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
@@ -291,9 +292,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(updatesItem)
         #endif
         appMenu.addItem(.separator())
+        appMenu.addItem(aiAccessMainMenuItem())
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide StickySync",
+                        action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = NSMenuItem(title: "Hide Others",
+                                    action: #selector(NSApplication.hideOtherApplications(_:)),
+                                    keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthers)
+        appMenu.addItem(withTitle: "Show All",
+                        action: #selector(NSApplication.unhideAllApplications(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit StickySync",
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
+        // MARK: File
         let fileItem = NSMenuItem()
         mainMenu.addItem(fileItem)
         let fileMenu = NSMenu(title: "File")
@@ -304,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addItem(to: fileMenu, "Close Note", #selector(closeKeyNote), "w")
         addItem(to: fileMenu, "Delete Note…", #selector(deleteKeyNote), "")
 
+        // MARK: Edit
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
         let editMenu = NSMenu(title: "Edit")
@@ -317,7 +333,136 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(.separator())
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
 
+        // MARK: View (theme)
+        let viewItem = NSMenuItem()
+        mainMenu.addItem(viewItem)
+        let viewMenu = NSMenu(title: "View")
+        viewItem.submenu = viewMenu
+        viewMenu.addItem(themeMainMenuItem())
+
+        // MARK: Window (standard)
+        let windowItem = NSMenuItem()
+        mainMenu.addItem(windowItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Minimize",
+                           action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom",
+                           action: #selector(NSWindow.zoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Bring All to Front",
+                           action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+        NSApp.windowsMenu = windowMenu
+
+        // MARK: Help
+        let helpItem = NSMenuItem()
+        mainMenu.addItem(helpItem)
+        let helpMenu = NSMenu(title: "Help")
+        helpItem.submenu = helpMenu
+        let whatsNew = NSMenuItem(title: "What’s New in StickySync",
+                                  action: #selector(showWhatsNewFromMenu),
+                                  keyEquivalent: "")
+        whatsNew.target = self
+        helpMenu.addItem(whatsNew)
+        NSApp.helpMenu = helpMenu
+
         NSApp.mainMenu = mainMenu
+
+        // Re-render the View → Theme submenu's checkmark when the user
+        // picks a theme (from any surface — status item, here, iCloud
+        // sync). Same handler keeps both menus in sync.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(rebuildThemeSubmenu),
+            name: .themeChanged, object: nil)
+    }
+
+    /// Theme submenu used in the View menu — mirrors the status-item
+    /// version so the two surfaces stay aligned. Rebuilt on
+    /// `.themeChanged`.
+    private func themeMainMenuItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        parent.submenu = makeThemeSubmenu()
+        return parent
+    }
+
+    private func makeThemeSubmenu() -> NSMenu {
+        let sub = NSMenu(title: "Theme")
+        let currentID = ThemeStore.shared.current.id
+        for t in Themes.all {
+            let item = NSMenuItem(title: t.displayName,
+                                  action: #selector(pickThemeFromMenu(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = t.id
+            item.state = (t.id == currentID) ? .on : .off
+            sub.addItem(item)
+        }
+        return sub
+    }
+
+    @objc private func rebuildThemeSubmenu() {
+        guard let viewMenu = NSApp.mainMenu?.items.first(where: { $0.submenu?.title == "View" })?.submenu,
+              let themeItem = viewMenu.items.first(where: { $0.title == "Theme" })
+        else { return }
+        themeItem.submenu = makeThemeSubmenu()
+    }
+
+    @objc private func pickThemeFromMenu(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        ThemeStore.shared.select(id)
+    }
+
+    /// AI access submenu used in the StickySync app menu. Same shape as
+    /// the status item version — Enable toggle + Show config… — so the
+    /// power-user feature lives in the canonical "app preferences"
+    /// location while still being available from the tray icon.
+    private func aiAccessMainMenuItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "AI access", action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: "AI access")
+        let toggle = NSMenuItem(title: "Enable AI access",
+                                action: #selector(toggleAIAccessFromMenu(_:)),
+                                keyEquivalent: "")
+        toggle.target = self
+        toggle.state = MCPSettings.shared.isEnabled ? .on : .off
+        sub.addItem(toggle)
+
+        let config = NSMenuItem(title: "Show config…",
+                                action: #selector(showAIConfigFromMenu),
+                                keyEquivalent: "")
+        config.target = self
+        config.isEnabled = MCPSettings.shared.isEnabled
+        sub.addItem(config)
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func toggleAIAccessFromMenu(_ sender: NSMenuItem) {
+        let nowEnabled = sender.state != .on
+        MCPSettings.shared.setEnabled(nowEnabled)
+        if nowEnabled {
+            startMCPServer()
+            showMCPConfigWindow()
+        } else {
+            stopMCPServer()
+            mcpConfigWindow?.close()
+        }
+        sender.state = nowEnabled ? .on : .off
+        if let parent = sender.menu?.items, parent.count > 1 {
+            parent[1].isEnabled = nowEnabled
+        }
+    }
+
+    @objc private func showAIConfigFromMenu() {
+        showMCPConfigWindow()
+    }
+
+    @objc private func showWhatsNewFromMenu() {
+        guard let note = ReleaseNotes.dropLatest(into: store) else { return }
+        if controllers[note.id] == nil {
+            openWindow(for: note, focus: true)
+        } else {
+            showNote(note.id)
+        }
     }
 
     private func addItem(to menu: NSMenu, _ title: String, _ action: Selector, _ key: String) {

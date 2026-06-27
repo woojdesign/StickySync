@@ -46,6 +46,9 @@ final class MCPServer {
 
     /// Begin listening. Throws on bind failure (typically port conflict —
     /// the UI surfaces this and lets the user pick a different port).
+    /// Blocks until the listener actually transitions to `.ready`; in
+    /// practice this takes a couple of ms, but tests that send a request
+    /// immediately after `start()` need the guarantee.
     func start() throws {
         guard !isRunning else { return }
         let params = NWParameters.tcp
@@ -61,14 +64,37 @@ final class MCPServer {
         listener.newConnectionHandler = { [weak self] connection in
             Task { @MainActor in self?.accept(connection) }
         }
+
+        let ready = DispatchSemaphore(value: 0)
+        var bindError: Error?
         listener.stateUpdateHandler = { state in
-            #if DEBUG
-            if case .failed(let err) = state {
-                NSLog("MCP listener failed: \(err)")
+            switch state {
+            case .ready:
+                ready.signal()
+            case .failed(let err):
+                bindError = err
+                ready.signal()
+            default:
+                break
             }
-            #endif
         }
         listener.start(queue: .main)
+
+        // Pump the main runloop while we wait so the listener's state
+        // updates can actually be delivered (they're posted to .main).
+        // Use the runloop, not semaphore.wait(), because the latter
+        // would deadlock on the same thread that's supposed to be
+        // dispatching the .ready transition.
+        let deadline = Date().addingTimeInterval(2.0)
+        while ready.wait(timeout: .now()) == .timedOut {
+            if Date() > deadline { break }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        if let bindError {
+            listener.cancel()
+            self.listener = nil
+            throw bindError
+        }
         isRunning = true
     }
 

@@ -23,13 +23,85 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "StickySync")
-            button.image?.isTemplate = true
-        }
+        refreshStatusIcon()
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
+
+        // Repaint the status-item icon whenever SyncMonitor's state
+        // changes — the small overlay dot is how Dropbox / iCloud
+        // signal "I'm checking" without nagging the user.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(syncStateDidChange),
+            name: SyncMonitor.stateDidChange, object: nil)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func syncStateDidChange() { refreshStatusIcon() }
+
+    /// Base sticky-note glyph with a Dropbox-style overlay dot in the
+    /// bottom-right corner that reflects sync state:
+    ///   - .checking → soft yellow (we don't yet know if we're caught up)
+    ///   - .syncing  → blue rotating accent (an operation is in flight)
+    ///   - .error    → red exclamation
+    ///   - .synced / .idle → no overlay
+    private func refreshStatusIcon() {
+        guard let button = statusItem.button else { return }
+        let base = NSImage(systemSymbolName: "note.text",
+                           accessibilityDescription: "StickySync")!
+        button.image = composedIcon(base: base, overlay: overlaySymbol(for: sync.state))
+        button.image?.isTemplate = false   // overlay needs color, so non-template
+    }
+
+    private func overlaySymbol(for state: SyncMonitor.State) -> (String, NSColor)? {
+        switch state {
+        case .checking: return ("circle.dotted", .systemYellow)
+        case .syncing:  return ("arrow.triangle.2.circlepath", .systemBlue)
+        case .error:    return ("exclamationmark.circle.fill", .systemRed)
+        case .idle, .synced: return nil
+        }
+    }
+
+    /// Compose the base symbol with a small overlay symbol in the
+    /// bottom-right. The two images are rendered into a single
+    /// 18×18 NSImage at NSStatusItem's natural button size.
+    private func composedIcon(base: NSImage, overlay: (String, NSColor)?) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        return NSImage(size: size, flipped: false) { rect in
+            // Base glyph — tint to labelColor so the menu bar's auto
+            // light/dark inversion still feels natural.
+            let baseConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+            let basePaletted = base.withSymbolConfiguration(baseConfig)!
+            basePaletted.isTemplate = true
+            NSColor.labelColor.set()
+            basePaletted.draw(in: rect, from: .zero,
+                              operation: .sourceOver, fraction: 1.0,
+                              respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+
+            // Overlay dot in the bottom-right.
+            guard let overlay else { return true }
+            let (name, color) = overlay
+            guard let badge = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return true }
+            let badgeConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+            let badgeSized = badge.withSymbolConfiguration(badgeConfig)!
+            let badgeRect = NSRect(x: rect.maxX - 10, y: 0, width: 10, height: 10)
+
+            // White ring behind the badge so it stays legible on top of
+            // the dark/light menu bar — mirrors how Dropbox draws its
+            // sync dot.
+            let ring = NSBezierPath(ovalIn: badgeRect.insetBy(dx: -1, dy: -1))
+            NSColor.windowBackgroundColor.setFill()
+            ring.fill()
+
+            color.set()
+            badgeSized.draw(in: badgeRect, from: .zero,
+                            operation: .sourceOver, fraction: 1.0,
+                            respectFlipped: true, hints: nil)
+            return true
+        }
     }
 
     // Rebuilt every time the menu opens, so it always reflects current notes.
@@ -159,20 +231,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private var syncTitle: String {
         switch sync.state {
-        case .syncing: return "Syncing…"
-        case .synced:  return "Synced"
-        case .error:   return "Sync paused"
-        case .idle:    return "iCloud"
+        case .checking: return "Checking iCloud…"
+        case .syncing:  return "Syncing…"
+        case .synced:   return "Synced"
+        case .error:    return "Sync paused"
+        case .idle:     return "iCloud"
         }
     }
 
     private var syncImage: NSImage? {
         let name: String
         switch sync.state {
-        case .syncing: name = "arrow.triangle.2.circlepath"
-        case .synced:  name = "checkmark.icloud"
-        case .error:   name = "exclamationmark.icloud"
-        case .idle:    name = "icloud"
+        case .checking: name = "icloud"
+        case .syncing:  name = "arrow.triangle.2.circlepath"
+        case .synced:   name = "checkmark.icloud"
+        case .error:    name = "exclamationmark.icloud"
+        case .idle:     name = "icloud"
         }
         let img = NSImage(systemSymbolName: name, accessibilityDescription: syncTitle)
         img?.isTemplate = true

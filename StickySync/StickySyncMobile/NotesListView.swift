@@ -211,6 +211,8 @@ struct NotesListView: View {
 
     @ViewBuilder private var syncStatus: some View {
         switch sync.state {
+        case .checking:
+            HStack(spacing: 4) { Image(systemName: "icloud"); Text("Checking iCloud…") }
         case .syncing:
             HStack(spacing: 4) { Image(systemName: "arrow.triangle.2.circlepath"); Text("Syncing…") }
         case .synced:
