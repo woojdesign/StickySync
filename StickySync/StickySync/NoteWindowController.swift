@@ -129,37 +129,75 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     // MARK: - Sync
 
+    /// A remote update (CloudKit import, MCP write from another device)
+    /// that arrived while the user was actively typing here. Held back
+    /// instead of dropped so we can re-apply it when the user pauses —
+    /// the silent-drop behavior was what caused remote edits to be lost
+    /// (the "Mac MCP edit lost after iOS edit" / "dabi paste-image-loss"
+    /// pattern).
+    private var pendingRemoteUpdate: Note?
+
     /// Apply an incoming (synced) version of this note to the open window.
-    /// Appearance and collapse always update; the text only updates when the
-    /// user isn't actively editing here, so a remote change never yanks the
-    /// cursor out from under them.
+    /// Appearance and collapse always update; the text only updates when
+    /// the user isn't actively editing here, so a remote change never
+    /// yanks the cursor. If the user IS editing, the remote is stashed
+    /// in `pendingRemoteUpdate` and applied on focus-loss
+    /// (`textDidEndEditing`) or window-resign.
     func refresh(from updated: Note) {
         let appearanceChanged = updated.colorToken != note.colorToken
             || updated.fontName != note.fontName
             || updated.fontSize != note.fontSize
         let contentChanged = updated.content != note.content
         // Only hold back the text update for the note the user is *actively*
-        // editing — i.e. its window is key and the editor is focused. A
-        // background note keeps its text view as first responder even when it
-        // isn't key, so without the isKeyWindow check, any note you'd ever
-        // clicked into would stop accepting synced edits.
+        // editing — i.e. its window is key and the editor is focused.
         let isEditing = window.isKeyWindow && window.firstResponder === noteView.textView
 
-        note = updated
-
-        if appearanceChanged { applyAppearance() }
+        if appearanceChanged {
+            note.colorToken = updated.colorToken
+            note.fontName = updated.fontName
+            note.fontSize = updated.fontSize
+            applyAppearance()
+        }
         setCollapsed(updated.collapsed, persist: false, animated: true)
 
-        if contentChanged && !isEditing {
-            let selection = noteView.textView.selectedRange
-            noteView.textView.string = updated.content
-            // Hydrate any `![alt](attachment://UUID)` references in the
-            // incoming content into inline image placeholders.
-            noteView.markdownStorage.substituteAttachmentReferences()
-            applyAppearance()
-            let length = (updated.content as NSString).length
-            noteView.textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
+        if contentChanged {
+            if isEditing {
+                // Hold off — don't yank the cursor mid-keystroke. Apply
+                // when the user pauses (textDidEndEditing) or when the
+                // window resigns key.
+                pendingRemoteUpdate = updated
+            } else {
+                applyRemoteContent(updated)
+            }
+        } else {
+            // No content change — still useful to update modifiedAt so
+            // local LWW comparisons stay accurate.
+            note.modifiedAt = max(note.modifiedAt, updated.modifiedAt)
         }
+    }
+
+    private func applyRemoteContent(_ updated: Note) {
+        note = updated
+        let selection = noteView.textView.selectedRange
+        noteView.textView.string = updated.content
+        // Hydrate any `![alt](attachment://UUID)` references in the
+        // incoming content into inline image placeholders.
+        noteView.markdownStorage.substituteAttachmentReferences()
+        applyAppearance()
+        let length = (updated.content as NSString).length
+        noteView.textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
+        pendingRemoteUpdate = nil
+    }
+
+    /// Flush any held-back remote update once the user has paused. Called
+    /// from `textDidEndEditing` (focus left the text view) and
+    /// `windowDidResignKey` (user moved to another window / app).
+    private func flushPendingRemoteIfQuiescent() {
+        guard let pending = pendingRemoteUpdate else { return }
+        // Pause any in-flight local save so the remote isn't immediately
+        // overwritten by our debounced write of stale content.
+        saveWorkItem?.cancel()
+        applyRemoteContent(pending)
     }
 
     // MARK: - Appearance
@@ -187,11 +225,24 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         // placeholders round-trip back to `![alt](attachment://UUID)` on
         // disk — saving the raw string would persist the FFFC marker.
         note.content = noteView.markdownStorage.sourceString
+        note.modifiedAt = Date()
         scheduleSave()
         // The text view's selection range is implicitly at the end of the
         // newly-typed character; refresh marker fade so freshly-typed
         // `**` / `_` etc. stay visible while editing.
         refreshActiveMarkerRange()
+    }
+
+    /// Focus left the text view — natural pause. Flush any remote update
+    /// we held back during the user's typing.
+    func textDidEndEditing(_ notification: Notification) {
+        flushPendingRemoteIfQuiescent()
+    }
+
+    /// Window lost key — user moved to another window or app. Also a
+    /// natural pause point. Flush any pending remote.
+    func windowDidResignKey(_ notification: Notification) {
+        flushPendingRemoteIfQuiescent()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {

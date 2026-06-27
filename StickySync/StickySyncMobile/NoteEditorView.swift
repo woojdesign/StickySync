@@ -20,6 +20,17 @@ struct NoteEditorView: View {
     @State private var landed = false
     @State private var focused: Bool = false
     @State private var showShareSheet = false
+    /// A remote update (CloudKit import, MCP write from another device)
+    /// that arrived while the user was typing. We don't apply it
+    /// immediately — that would yank the cursor — but we don't drop it
+    /// either (the previous silent-drop behavior is what caused the
+    /// "Mac MCP edit lost on iOS" reports). Applied when the user pauses
+    /// typing (focus leaves the text view).
+    @State private var pendingRemoteUpdate: Note?
+    /// True once the user has typed in this editor session. Lets us
+    /// distinguish "no local changes worth keeping, just refresh to
+    /// remote" from "user has typed, be careful with their edits."
+    @State private var hasLocalEdits: Bool = false
 
     init(note: Note) {
         _note = State(initialValue: note)
@@ -49,8 +60,32 @@ struct NoteEditorView: View {
         .safeAreaInset(edge: .bottom) { paletteDock }
         .scaleEffect(landed ? 1 : 0.98)
         .opacity(landed ? 1 : 0)
-        .onAppear { withAnimation(WoojMotion.settle.animation) { landed = true } }
-        .onChange(of: note.content) { _ in scheduleSave() }
+        .onAppear {
+            withAnimation(WoojMotion.settle.animation) { landed = true }
+            // Take the store's current view of the note as our starting
+            // point — model.notes may have refreshed via sync between the
+            // list-view tap and this editor materializing.
+            refreshFromStoreIfNewer()
+        }
+        .onChange(of: note.content) { _ in
+            hasLocalEdits = true
+            scheduleSave()
+        }
+        .onChange(of: model.notes) { _ in
+            // Sync brought in a newer version. Apply it if we don't have
+            // unsaved local edits OR if the user isn't actively typing
+            // (focus left the text view). Otherwise stash it and apply
+            // when focus leaves.
+            refreshFromStoreIfNewer()
+        }
+        .onChange(of: focused) { isFocused in
+            // Focus left the text view — the user has paused. Apply any
+            // pending remote update we held back during typing.
+            if !isFocused, let pending = pendingRemoteUpdate {
+                applyRemote(pending)
+                pendingRemoteUpdate = nil
+            }
+        }
         .onDisappear { saveNow() }
         .sheet(isPresented: $showShareSheet) {
             CloudShareSheet(note: note) { _ in
@@ -170,5 +205,36 @@ struct NoteEditorView: View {
         note.modifiedAt = Date()
         saveTask?.cancel()
         model.save(note)
+        hasLocalEdits = false
+    }
+
+    /// Pull the model's current copy of this note. If it's newer than
+    /// what the editor is showing, either apply it (no local edits or
+    /// no focus) or stash it for later (user is typing).
+    private func refreshFromStoreIfNewer() {
+        guard let modelVersion = model.notes.first(where: { $0.id == note.id }) else {
+            return
+        }
+        // No remote-newer signal — nothing to do.
+        guard modelVersion.modifiedAt > note.modifiedAt else { return }
+
+        if hasLocalEdits && focused {
+            // Mid-typing: hold off so we don't yank the cursor or drop the
+            // user's in-flight characters. Apply when focus leaves.
+            pendingRemoteUpdate = modelVersion
+        } else {
+            applyRemote(modelVersion)
+        }
+    }
+
+    private func applyRemote(_ remote: Note) {
+        // Replace local working copy with the remote. Bail-out path for
+        // the field-merge cases (e.g., user only changed colorToken, remote
+        // only changed content) would go here in a future revision; for
+        // now we take the remote whole-note because LWW with the
+        // hasLocalEdits guard already handles the bulk of cases without
+        // the merge-complexity tax.
+        note = remote
+        hasLocalEdits = false
     }
 }
