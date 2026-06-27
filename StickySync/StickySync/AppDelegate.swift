@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controllers: [UUID: NoteWindowController] = [:]
     private var statusItemController: StatusItemController?
     private var listWindowController: NotesListWindowController?
+    private var mcpServer: MCPServer?
+    private var mcpConfigWindow: NSWindow?
 
     #if canImport(Sparkle)
     // In-app auto-updates. Start the updater only when a feed is configured —
@@ -59,6 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Refresh windows + lists when the store changes from outside (sync).
         store.onChange = { [weak self] in
             DispatchQueue.main.async { self?.reconcileWindows() }
+        }
+
+        // Start the local AI-access HTTP server if the user enabled it
+        // last session. Failure is non-fatal (e.g. port conflict) — we
+        // log and surface in the UI via the "Enable AI access" toggle
+        // showing as off.
+        if MCPSettings.shared.isEnabled {
+            startMCPServer()
         }
 
         // Drop a "what's new in X.Y.0" release sticky if we've crossed a
@@ -188,8 +198,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showNote(note.id)
             }
         }
+        controller.onToggleAIAccess = { [weak self] enable in
+            guard let self else { return }
+            MCPSettings.shared.setEnabled(enable)
+            if enable {
+                self.startMCPServer()
+                // First-enable: open the config sheet immediately so the
+                // user can copy the snippet into their AI client without
+                // having to re-navigate the menu.
+                self.showMCPConfigWindow()
+            } else {
+                self.stopMCPServer()
+                self.mcpConfigWindow?.close()
+            }
+        }
+        controller.onShowAIConfig = { [weak self] in self?.showMCPConfigWindow() }
+        controller.isAIAccessEnabled = { MCPSettings.shared.isEnabled }
         controller.isNoteOpen = { [weak self] id in self?.controllers[id] != nil }
         statusItemController = controller
+    }
+
+    // MARK: - MCP server lifecycle
+
+    private func startMCPServer() {
+        guard mcpServer == nil else { return }
+        let token = MCPSettings.shared.token
+        let server = MCPServer(store: store as AnyObject & NoteStore, authToken: token)
+        do {
+            try server.start()
+            mcpServer = server
+        } catch {
+            NSLog("MCP server failed to start: \(error)")
+            MCPSettings.shared.setEnabled(false)
+        }
+    }
+
+    private func stopMCPServer() {
+        mcpServer?.stop()
+        mcpServer = nil
+    }
+
+    @MainActor private func showMCPConfigWindow() {
+        if let existing = mcpConfigWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = MCPConfigWindow.make(settings: MCPSettings.shared) { [weak self] in
+            self?.mcpConfigWindow = nil
+        }
+        mcpConfigWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc func showList() {

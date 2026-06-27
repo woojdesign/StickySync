@@ -8,6 +8,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onShowNote: ((UUID) -> Void)?
     var onShowList: (() -> Void)?
     var isNoteOpen: ((UUID) -> Bool)?
+    /// Toggle the local MCP server on/off. Wired by AppDelegate.
+    var onToggleAIAccess: ((Bool) -> Void)?
+    /// Open the config sheet — the JSON snippet the user pastes into
+    /// Claude Code / Cursor / etc. Only relevant when AI access is on.
+    var onShowAIConfig: (() -> Void)?
+    var isAIAccessEnabled: (() -> Bool)?
 
     private let store: NoteStore
     private let statusItem: NSStatusItem
@@ -71,9 +77,48 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                                   keyEquivalent: "")
         whatsNew.target = self
         menu.addItem(whatsNew)
+        menu.addItem(aiAccessSubmenu())
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit StickySync",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+    }
+
+    /// "AI access" submenu. Hidden from anyone who doesn't open it (the
+    /// label itself is the only surface) — power-user feature, no
+    /// nagging. Enable toggles the local MCP server; Show config opens
+    /// the JSON snippet to paste into the user's AI client.
+    private func aiAccessSubmenu() -> NSMenuItem {
+        let parent = NSMenuItem(title: "AI access", action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: "AI access")
+        let enabled = isAIAccessEnabled?() ?? false
+
+        let toggle = NSMenuItem(title: "Enable AI access",
+                                action: #selector(toggleAIAccess(_:)),
+                                keyEquivalent: "")
+        toggle.target = self
+        toggle.state = enabled ? .on : .off
+        sub.addItem(toggle)
+
+        let config = NSMenuItem(title: "Show config…",
+                                action: #selector(showAIConfig),
+                                keyEquivalent: "")
+        config.target = self
+        config.isEnabled = enabled
+        sub.addItem(config)
+
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func toggleAIAccess(_ sender: NSMenuItem) {
+        // The handler flips MCPSettings + starts/stops the server.
+        // It also opens the config sheet on first enable.
+        let nowEnabled = sender.state != .on
+        onToggleAIAccess?(nowEnabled)
+    }
+
+    @objc private func showAIConfig() {
+        onShowAIConfig?()
     }
 
     /// Drop the latest "what's new" sticky on demand (or open the existing
