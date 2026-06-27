@@ -1,18 +1,24 @@
 // ArrangeStickies.swift
 //
-// "Window → Tidy Stickies" and "Window → Arrange in Grid" — two related
-// commands with different opinions on what to do with your sticky-note
-// placements.
+// "Window → Tidy Stickies" and "Window → Arrange in Grid" — two commands
+// with different opinions on what to do with your sticky-note placements.
 //
-// Tidy: respect what you've already arranged. Only fix the ones that
-//   have drifted off-screen or are overlapping another sticky. The
-//   thoughtful-coworker hand on a messy desk.
-// Grid: full reset. Every visible sticky gets a fresh position on its
-//   current screen. For the moments of genuine chaos.
+// Tidy: respect what you've already placed. Only fix the stickies that
+//   have drifted off-screen or are overlapping another sticky by more than
+//   30% of their area. Drifted ones land in a tidy cascade slot on the
+//   screen they were on. Hidden stickies untouched.
 //
-// Hidden stickies are left hidden in both — you chose to hide them,
-// arrange doesn't override that intent. Multi-monitor: each sticky stays
-// on the screen it's currently on; we never gather across displays.
+// Grid: full reset. Every visible sticky on each screen gets a fresh
+//   row-major position. The layout math is factored into the pure
+//   `GridLayout` enum so it's testable without standing up real
+//   NSWindows.
+//
+// Architecture note (post-0.7.3): the visual layout math was getting
+// tested only by "does it compile and look right when I eyeball it,"
+// which the 0.7.3 ship demonstrated isn't enough. Split into:
+//   - `GridLayout` (pure NSRect math) — covered by unit tests
+//   - `apply(...)` (animates NSWindows) — verified by launching the app
+// so a bad change in the math fails a test before it ever ships.
 
 import AppKit
 import NotesKit
@@ -20,115 +26,58 @@ import NotesKit
 @MainActor
 enum ArrangeStickies {
 
-    /// Animate every "out of place" sticky into a tidy cascade slot,
-    /// leaving the rest alone.
+    /// Move only the "out of place" stickies — off-screen or overlapping
+    /// another sticky by more than 30% of their area — into empty space
+    /// on their screen. Well-placed stickies are not touched. If there
+    /// isn't enough empty space on screen for a badly-placed sticky, it
+    /// falls back to the top-left corner (and accepts overlap rather
+    /// than vanishing off-screen).
     static func tidy(_ controllers: [NoteWindowController]) {
         let visible = controllers.filter { $0.window.isVisible }
         guard !visible.isEmpty else { return }
 
-        // Group by current screen so the tidy cascade stays on the screen
-        // each sticky is already on.
-        let byScreen = group(visible)
-
-        for (screen, group) in byScreen {
+        for (screen, group) in self.group(visible) {
             let badlyPlaced = group.filter {
                 isOutOfBounds($0.window, on: screen) ||
                 overlapsSibling($0.window, siblings: group)
             }
             guard !badlyPlaced.isEmpty else { continue }
 
-            var slot = startSlot(on: screen)
-            for controller in badlyPlaced.sortedNewestFirst() {
-                let size = controller.window.frame.size
-                let origin = NSPoint(x: slot.x, y: slot.y - size.height)
-                animate(controller.window, to: NSRect(origin: origin, size: size))
-                slot = nextSlot(after: slot, on: screen)
+            // The "fixed" set: every well-placed sticky on this screen,
+            // whose position we promise not to touch.
+            let badIDs = Set(badlyPlaced.map { ObjectIdentifier($0) })
+            let fixed = group
+                .filter { !badIDs.contains(ObjectIdentifier($0)) }
+                .map { $0.window.frame }
+
+            let toPlace = badlyPlaced.sortedNewestFirst()
+            let sizes = toPlace.map { $0.window.frame.size }
+            let positions = TidyLayout.places(
+                sizesToPlace: sizes,
+                avoiding: fixed,
+                in: screen.visibleFrame)
+            for (controller, target) in zip(toPlace, positions) {
+                animate(controller.window, to: target)
             }
         }
     }
 
     /// Repack every visible sticky into a row-major grid on its current
-    /// screen. Newest-modified land at the top-left.
+    /// screen. Newest-modified lands at the top-left so what you're
+    /// working on stays close to the cursor.
     static func grid(_ controllers: [NoteWindowController]) {
         let visible = controllers.filter { $0.window.isVisible }
         guard !visible.isEmpty else { return }
 
-        let byScreen = group(visible)
-
-        for (screen, group) in byScreen {
-            layoutGrid(group.sortedNewestFirst(), on: screen)
-        }
-    }
-
-    // MARK: - Cascade
-
-    /// Where the cascade starts on a screen — a margin in from the top-left.
-    private static func startSlot(on screen: NSScreen) -> NSPoint {
-        let frame = screen.visibleFrame
-        return NSPoint(x: frame.minX + 24, y: frame.maxY - 24)
-    }
-
-    private static func nextSlot(after p: NSPoint, on screen: NSScreen) -> NSPoint {
-        let frame = screen.visibleFrame
-        let step: CGFloat = 28
-        var next = NSPoint(x: p.x + step, y: p.y - step)
-        if next.y < frame.minY + 200 {
-            // Reached the bottom — wrap to a new column further right,
-            // back near the top.
-            next = NSPoint(x: p.x + step * 6, y: frame.maxY - 24)
-        }
-        if next.x > frame.maxX - 200 {
-            // Reached the right edge — wrap back to the left edge near
-            // the top. This is the "we have way too many stickies" path.
-            next = startSlot(on: screen)
-        }
-        return next
-    }
-
-    // MARK: - Grid
-
-    private static func layoutGrid(_ controllers: [NoteWindowController],
-                                   on screen: NSScreen) {
-        let frame = screen.visibleFrame
-        let margin: CGFloat = 24
-        let spacing: CGFloat = 14
-
-        // Use the max sticky size as the cell so nothing crops. Natural
-        // sticky default is 240×180; rounding up gives wiggle room for
-        // user-resized notes without forcing a uniform crop.
-        let maxWidth  = max(240, controllers.map { $0.window.frame.width  }.max() ?? 240)
-        let maxHeight = max(180, controllers.map { $0.window.frame.height }.max() ?? 180)
-
-        let cellW = maxWidth + spacing
-        let cellH = maxHeight + spacing
-        let cols = max(1, Int((frame.width - margin * 2) / cellW))
-
-        for (index, controller) in controllers.enumerated() {
-            let row = index / cols
-            let col = index % cols
-            let size = controller.window.frame.size
-
-            let originX = frame.minX + margin + CGFloat(col) * cellW
-            let originY = frame.maxY - margin - CGFloat(row + 1) * cellH
-
-            // If we've run off the bottom of the screen, wrap by stacking
-            // overflow back near the top-left in a tighter cascade. Not
-            // ideal, but better than putting stickies off-screen.
-            let safeOrigin: NSPoint
-            if originY < frame.minY {
-                let cascadeIdx = index - (rowCount(cols: cols, screen: frame, cellH: cellH) * cols)
-                safeOrigin = NSPoint(
-                    x: frame.minX + margin + CGFloat(cascadeIdx) * 18,
-                    y: frame.maxY - margin - 18 - CGFloat(cascadeIdx) * 18 - size.height)
-            } else {
-                safeOrigin = NSPoint(x: originX, y: originY)
+        for (screen, group) in group(visible) {
+            let sortedControllers = group.sortedNewestFirst()
+            let sizes = sortedControllers.map { $0.window.frame.size }
+            let positions = GridLayout.frames(forSizes: sizes,
+                                              in: screen.visibleFrame)
+            for (controller, frame) in zip(sortedControllers, positions) {
+                animate(controller.window, to: frame)
             }
-            animate(controller.window, to: NSRect(origin: safeOrigin, size: size))
         }
-    }
-
-    private static func rowCount(cols: Int, screen: NSRect, cellH: CGFloat) -> Int {
-        max(1, Int((screen.height - 48) / cellH))
     }
 
     // MARK: - Helpers
@@ -136,7 +85,7 @@ enum ArrangeStickies {
     private static func screen(for window: NSWindow) -> NSScreen {
         // The screen whose visibleFrame contains the center of the window,
         // falling back to the main screen if the window isn't on any
-        // screen at all (i.e., it's drifted off).
+        // screen (i.e., it has drifted off completely).
         let center = NSPoint(x: window.frame.midX, y: window.frame.midY)
         for screen in NSScreen.screens where screen.visibleFrame.contains(center) {
             return screen
@@ -159,8 +108,9 @@ enum ArrangeStickies {
     }
 
     private static func isOutOfBounds(_ window: NSWindow, on screen: NSScreen) -> Bool {
-        // "Out of bounds" = significantly off-screen, not just touching
-        // the edge. Allow up to 40pt overhang before we move it.
+        // "Out of bounds" = significantly off-screen. Allow up to 40pt of
+        // overhang before we move it; users dragging windows to a corner
+        // shouldn't trigger Tidy.
         let frame = window.frame
         let visible = screen.visibleFrame.insetBy(dx: -40, dy: -40)
         return !visible.contains(frame)
@@ -168,8 +118,6 @@ enum ArrangeStickies {
 
     private static func overlapsSibling(_ window: NSWindow,
                                         siblings: [NoteWindowController]) -> Bool {
-        // Significant overlap: more than ~30% of the smaller of the two
-        // window areas. Touching corners doesn't count.
         let frame = window.frame
         for other in siblings where other.window !== window {
             let inter = frame.intersection(other.window.frame)
@@ -182,23 +130,149 @@ enum ArrangeStickies {
         return false
     }
 
-    /// Animate the window into its new frame at the calm-motion duration.
-    /// Uses NSAnimationContext so the move tracks AppKit's standard
-    /// timing curve.
+    /// Animate the window to its new frame using `NSAnimationContext` —
+    /// `window.animator().setFrame(_:display:)` honors the context's
+    /// duration / timing, unlike the `setFrame(_:display:animate:)` form
+    /// which uses NSWindow's own (and ignores ours).
     private static func animate(_ window: NSWindow, to frame: NSRect) {
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.25
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().setFrame(frame, display: true, animate: true)
+            window.animator().setFrame(frame, display: true)
         }
     }
 }
 
 private extension Array where Element == NoteWindowController {
-    /// Order stickies by modified-time, newest first — for cascades and
-    /// grids alike, the most-recently-touched lands first so what you're
-    /// working on stays close to the cursor.
+    /// Order stickies by modified-time, newest first.
     func sortedNewestFirst() -> [NoteWindowController] {
         sorted { $0.note.modifiedAt > $1.note.modifiedAt }
+    }
+}
+
+// MARK: - Pure layout (testable)
+
+/// The pure math for "Arrange in Grid", lifted out of the window-handling
+/// code so it can be unit-tested without an NSWindow. Bin-packing-lite:
+/// each row is laid out left-to-right at natural widths; we wrap to the
+/// next row when the next sticky wouldn't fit. Within a row every sticky
+/// aligns at the row's *top*; the row's height is the max sticky height
+/// in that row (so the next row starts at the bottom of the tallest one).
+/// Overflow rows clamp into the visible area at the bottom edge so
+/// stickies stay reachable instead of vanishing off-screen.
+/// First-fit empty-space search. Used by Tidy: each badly-placed
+/// sticky finds the first on-screen position that doesn't overlap any
+/// "fixed" rect (well-placed stickies you're leaving alone) or any
+/// already-placed rect from this same call.
+///
+/// Scan order is top-down, left-to-right at a 20pt grid resolution —
+/// fine enough to find space between awkwardly-placed stickies, coarse
+/// enough that the scan is cheap for a few dozen rects.
+enum TidyLayout {
+    static let margin: CGFloat = 24
+    static let step: CGFloat = 20
+
+    /// Place each size from `sizesToPlace`, in order, in the first free
+    /// position within `bounds` that doesn't overlap `fixed` rects or
+    /// any previously-placed result. Falls back to the top-left if no
+    /// free position fits — accepting overlap is better than vanishing
+    /// off-screen.
+    static func places(sizesToPlace: [NSSize],
+                       avoiding fixed: [NSRect],
+                       in bounds: NSRect) -> [NSRect] {
+        var occupied = fixed
+        var out: [NSRect] = []
+        for size in sizesToPlace {
+            let placed = firstFreePosition(for: size, in: bounds, avoiding: occupied)
+            occupied.append(placed)
+            out.append(placed)
+        }
+        return out
+    }
+
+    private static func firstFreePosition(for size: NSSize,
+                                          in bounds: NSRect,
+                                          avoiding occupied: [NSRect]) -> NSRect {
+        let minX = bounds.minX + margin
+        let maxX = bounds.maxX - margin - size.width
+        let minY = bounds.minY + margin
+        let maxY = bounds.maxY - margin - size.height
+        guard maxX >= minX, maxY >= minY else {
+            return NSRect(origin: NSPoint(x: bounds.minX + margin,
+                                          y: bounds.maxY - margin - size.height),
+                          size: size)
+        }
+
+        // Top-down, left-to-right.
+        var y = maxY
+        while y >= minY {
+            var x = minX
+            while x <= maxX {
+                let candidate = NSRect(x: x, y: y, width: size.width, height: size.height)
+                if !overlapsAny(candidate, occupied) {
+                    return candidate
+                }
+                x += step
+            }
+            y -= step
+        }
+        // Couldn't fit — fall back to top-left.
+        return NSRect(x: minX, y: maxY, width: size.width, height: size.height)
+    }
+
+    private static func overlapsAny(_ rect: NSRect, _ others: [NSRect]) -> Bool {
+        for other in others {
+            let inter = rect.intersection(other)
+            if !inter.isNull && !inter.isEmpty { return true }
+        }
+        return false
+    }
+}
+
+enum GridLayout {
+    static let margin: CGFloat = 24
+    static let spacing: CGFloat = 14
+
+    /// Compute target frames for `sizes`, in the same order, fitting them
+    /// row-major into `bounds`. `bounds` is a screen-space NSRect (i.e.,
+    /// `NSScreen.visibleFrame` — bottom-left origin, Y increases upward).
+    static func frames(forSizes sizes: [NSSize], in bounds: NSRect) -> [NSRect] {
+        guard !sizes.isEmpty, bounds.width > margin * 2 else { return [] }
+        let usableWidth = bounds.width - margin * 2
+
+        var frames: [NSRect] = []
+        var cursorX = bounds.minX + margin
+        var topOfRow = bounds.maxY - margin
+        var maxHeightInRow: CGFloat = 0
+        let bottomLimit = bounds.minY + margin
+
+        for size in sizes {
+            // Would adding this sticky overflow the row's right edge?
+            // If yes AND there's at least one sticky in the current row,
+            // wrap. (If a single sticky is wider than the screen, we
+            // still place it; it spills past the right edge.)
+            let wouldOverflow = cursorX + size.width > bounds.minX + margin + usableWidth
+            let rowHasItems = cursorX > bounds.minX + margin
+            if wouldOverflow && rowHasItems {
+                topOfRow -= (maxHeightInRow + spacing)
+                cursorX = bounds.minX + margin
+                maxHeightInRow = 0
+            }
+
+            // Top-aligned within the row: window's *top* sits at
+            // `topOfRow`, so its bottom-left origin Y = topOfRow - height.
+            // If we'd land below the screen, clamp to the bottom margin —
+            // overflow stickies pile up there but stay visible.
+            let originY = max(bottomLimit, topOfRow - size.height)
+            frames.append(NSRect(
+                x: cursorX,
+                y: originY,
+                width: size.width,
+                height: size.height))
+
+            cursorX += size.width + spacing
+            maxHeightInRow = max(maxHeightInRow, size.height)
+        }
+        return frames
     }
 }
