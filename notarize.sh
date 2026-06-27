@@ -77,7 +77,24 @@ xcodebuild -exportArchive \
 
 echo "==> Notarize (uploads and waits for Apple)"
 ditto -c -k --keepParent "$APP" "$OUT_ZIP"
-xcrun notarytool submit "$OUT_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+
+# Auth resolution: prefer the keychain profile (one-time setup); fall back
+# to the App Store Connect API key (the same ASC_* env vars `testflight.sh`
+# uses, set in ~/.zshrc) when the keychain credential is missing or the
+# shell session can't reach it. Keeps a single notary path even if the
+# keychain locks itself between sessions.
+NOTARY_AUTH=()
+if xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+    NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+elif [ -n "${ASC_KEY_PATH:-}" ] && [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ]; then
+    NOTARY_AUTH=(--key "$ASC_KEY_PATH" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
+else
+    echo "error: no notary credential available." >&2
+    echo "  Either restore the keychain profile via 'xcrun notarytool store-credentials \"$NOTARY_PROFILE\"'" >&2
+    echo "  or export ASC_KEY_PATH, ASC_KEY_ID, ASC_ISSUER_ID (see CLAUDE.md)." >&2
+    exit 1
+fi
+xcrun notarytool submit "$OUT_ZIP" "${NOTARY_AUTH[@]}" --wait
 
 echo "==> Staple ticket onto the app"
 xcrun stapler staple "$APP"

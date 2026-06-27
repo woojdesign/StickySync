@@ -68,9 +68,18 @@ if command -v create-dmg >/dev/null; then
         >/dev/null
 
     echo "==> Notarize DMG"
-    xcrun notarytool submit "$DMG" \
-        --keychain-profile "StickySync-notary" \
-        --wait
+    # Same auth-resolution dance as notarize.sh — keychain first,
+    # ASC API key fallback. See notarize.sh comment.
+    DMG_NOTARY_AUTH=()
+    if xcrun notarytool history --keychain-profile "StickySync-notary" >/dev/null 2>&1; then
+        DMG_NOTARY_AUTH=(--keychain-profile "StickySync-notary")
+    elif [ -n "${ASC_KEY_PATH:-}" ] && [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ]; then
+        DMG_NOTARY_AUTH=(--key "$ASC_KEY_PATH" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
+    else
+        echo "error: no notary credential available for DMG step." >&2
+        exit 1
+    fi
+    xcrun notarytool submit "$DMG" "${DMG_NOTARY_AUTH[@]}" --wait
     xcrun stapler staple "$DMG"
 else
     echo "warn: create-dmg not installed (brew install create-dmg) — skipping DMG"
