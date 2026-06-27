@@ -61,6 +61,27 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         noteView.textView.delegate = self
         noteView.textView.string = note.content
 
+        // Bridge the storage into NotesKit so inline `attachment://UUID`
+        // references hydrate to NSImage, and existing references in the
+        // loaded note's body get substituted into FFFC + inline image now.
+        let storeRef = store
+        noteView.markdownStorage.attachmentLoader = { [weak storeRef] uuid in
+            guard let data = storeRef?.imageData(for: uuid) else { return nil }
+            return NSImage(data: data)
+        }
+        noteView.markdownStorage.substituteAttachmentReferences()
+
+        // Wire the paste handler to upload through NotesKit and re-sync the
+        // expanded Markdown back into Note.content.
+        noteView.textView.attachmentContext = .init(
+            noteID: note.id,
+            noteStore: store as AnyObject
+        ) { [weak self] in
+            guard let self else { return }
+            self.note.content = self.noteView.markdownStorage.sourceString
+            self.scheduleSave()
+        }
+
         noteView.onColor = { [weak self] in self?.showColorPopover() }
         noteView.onFont = { [weak self] in self?.showFontPopover() }
         noteView.onClose = { [weak self] in self?.requestClose() }
@@ -132,6 +153,9 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         if contentChanged && !isEditing {
             let selection = noteView.textView.selectedRange
             noteView.textView.string = updated.content
+            // Hydrate any `![alt](attachment://UUID)` references in the
+            // incoming content into inline image placeholders.
+            noteView.markdownStorage.substituteAttachmentReferences()
             applyAppearance()
             let length = (updated.content as NSString).length
             noteView.textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
@@ -159,7 +183,10 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
                 noteView.textView.setSelectedRange(NSRange(location: exp.newCursor, length: 0))
             }
         }
-        note.content = noteView.textView.string
+        // Use the storage's expanded form so any inline `\u{FFFC}` image
+        // placeholders round-trip back to `![alt](attachment://UUID)` on
+        // disk — saving the raw string would persist the FFFC marker.
+        note.content = noteView.markdownStorage.sourceString
         scheduleSave()
         // The text view's selection range is implicitly at the end of the
         // newly-typed character; refresh marker fade so freshly-typed

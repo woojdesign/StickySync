@@ -11,8 +11,19 @@
 // handle them without depending on a Format menu being wired into the app.
 
 import AppKit
+import NotesKit
 
 final class MarkdownNSTextView: NSTextView {
+
+    /// Set by `NoteWindowController` so paste knows which note to upload
+    /// image bytes into. `onPasted` fires after a successful image paste so
+    /// the controller can sync the new Markdown content back to NotesKit.
+    struct AttachmentContext {
+        let noteID: UUID?
+        weak var noteStore: AnyObject?
+        let onPasted: () -> Void
+    }
+    var attachmentContext: AttachmentContext?
 
     /// Click on a `[ ]` / `[x]` slot toggles the checkbox without placing
     /// the cursor inside it. Clicks outside the slot fall through to the
@@ -81,5 +92,58 @@ final class MarkdownNSTextView: NSTextView {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    // MARK: - Paste
+
+    /// Paste intercept. When the pasteboard carries an image, upload through
+    /// NotesKit and insert a Markdown reference. Anything else falls through
+    /// to the default behavior (text, RTF, etc.).
+    override func paste(_ sender: Any?) {
+        if let context = attachmentContext,
+           let noteID = context.noteID,
+           let store = context.noteStore as? NoteStore,
+           let payload = bestImagePayload(from: NSPasteboard.general),
+           let image = NSImage(data: payload.data),
+           let attachment = store.addImageAttachment(
+                for: noteID,
+                imageData: payload.data,
+                mimeType: payload.mimeType,
+                originalFilename: nil,
+                altText: nil
+           ),
+           let storage = textStorage as? MarkdownTextStorage {
+            let insertAt = selectedRange().location
+            storage.insertAttachment(id: attachment.id,
+                                     altText: "",
+                                     image: image,
+                                     at: insertAt)
+            setSelectedRange(NSRange(location: insertAt + 1, length: 0))
+            context.onPasted()
+            return
+        }
+        super.paste(sender)
+    }
+
+    /// Read the highest-fidelity image off the pasteboard. PNG / HEIC first
+    /// (lossless / native), then JPEG, then TIFF/generic so we don't drop a
+    /// screenshot from older sources.
+    private func bestImagePayload(from pb: NSPasteboard) -> (data: Data, mimeType: String)? {
+        if let png = pb.data(forType: NSPasteboard.PasteboardType("public.png"))
+            ?? pb.data(forType: .png) {
+            return (png, "image/png")
+        }
+        if let heic = pb.data(forType: NSPasteboard.PasteboardType("public.heic")) {
+            return (heic, "image/heic")
+        }
+        if let jpeg = pb.data(forType: NSPasteboard.PasteboardType("public.jpeg")) {
+            return (jpeg, "image/jpeg")
+        }
+        if let tiff = pb.data(forType: .tiff),
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return (png, "image/png")
+        }
+        return nil
     }
 }
