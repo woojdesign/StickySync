@@ -127,59 +127,29 @@ final class MarkdownNSTextView: NSTextView {
     /// NotesKit and insert a Markdown reference. Anything else falls through
     /// to the default behavior (text, RTF, etc.).
     override func paste(_ sender: Any?) {
-        NSLog("StickySync[paste] enter — sender=%@", String(describing: sender))
-
-        guard let context = attachmentContext else {
-            NSLog("StickySync[paste] no attachmentContext — falling back")
-            super.paste(sender); return
+        if let context = attachmentContext,
+           let noteID = context.noteID,
+           let store = context.noteStore as? NoteStore,
+           let payload = bestImagePayload(from: NSPasteboard.general),
+           let image = NSImage(data: payload.data),
+           let attachment = store.addImageAttachment(
+                for: noteID,
+                imageData: payload.data,
+                mimeType: payload.mimeType,
+                originalFilename: nil,
+                altText: nil
+           ),
+           let storage = textStorage as? MarkdownTextStorage {
+            let insertAt = selectedRange().location
+            storage.insertAttachment(id: attachment.id,
+                                     altText: "",
+                                     image: image,
+                                     at: insertAt)
+            setSelectedRange(NSRange(location: insertAt + 1, length: 0))
+            context.onPasted()
+            return
         }
-        guard let noteID = context.noteID else {
-            NSLog("StickySync[paste] no noteID — falling back")
-            super.paste(sender); return
-        }
-        guard let store = context.noteStore as? NoteStore else {
-            NSLog("StickySync[paste] noteStore cast failed — actual=%@",
-                  String(describing: context.noteStore))
-            super.paste(sender); return
-        }
-
-        let types = NSPasteboard.general.types?.map { $0.rawValue } ?? []
-        NSLog("StickySync[paste] pasteboard types: %@", types.joined(separator: ", "))
-
-        guard let payload = bestImagePayload(from: NSPasteboard.general) else {
-            NSLog("StickySync[paste] no image payload on pasteboard — falling back")
-            super.paste(sender); return
-        }
-        NSLog("StickySync[paste] image payload: %d bytes, mime=%@",
-              payload.data.count, payload.mimeType)
-
-        guard let image = NSImage(data: payload.data) else {
-            NSLog("StickySync[paste] NSImage(data:) failed")
-            super.paste(sender); return
-        }
-        guard let attachment = store.addImageAttachment(
-            for: noteID,
-            imageData: payload.data,
-            mimeType: payload.mimeType,
-            originalFilename: nil,
-            altText: nil
-        ) else {
-            NSLog("StickySync[paste] addImageAttachment returned nil — noteID may be unknown to store")
-            super.paste(sender); return
-        }
-        guard let storage = textStorage as? MarkdownTextStorage else {
-            NSLog("StickySync[paste] textStorage isn't MarkdownTextStorage")
-            super.paste(sender); return
-        }
-
-        let insertAt = selectedRange().location
-        storage.insertAttachment(id: attachment.id,
-                                 altText: "",
-                                 image: image,
-                                 at: insertAt)
-        setSelectedRange(NSRange(location: insertAt + 1, length: 0))
-        context.onPasted()
-        NSLog("StickySync[paste] inserted attachment %@", attachment.id.uuidString)
+        super.paste(sender)
     }
 
     /// Read the highest-fidelity image off the pasteboard. PNG / HEIC first
