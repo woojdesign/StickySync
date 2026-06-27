@@ -329,9 +329,15 @@ struct NoteCard: View {
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: WoojRadius.md, style: .continuous))
             }
+            // Per-slot text color (resolved through the current theme) so
+            // a dark slot — Bold Berry's Burgundy, Sunny Beach's Slate,
+            // Earthy Forest's Deep Pine — uses the palette's white-ink
+            // pair, not the wooj reading color (which is hardcoded dark).
+            // The editor already does this; the card index needs the
+            // same treatment for parity and legibility.
             Text(preview)
                 .font(.custom(WoojType.reading.family, size: 16))
-                .foregroundStyle(WoojColor.reading)
+                .foregroundStyle(Appearance.text(note.colorToken))
                 .lineSpacing(3)
                 .lineLimit(thumb == nil ? 5 : 3)
                 .multilineTextAlignment(.leading)
@@ -340,7 +346,7 @@ struct NoteCard: View {
             HStack(spacing: WoojSpace.xs) {
                 Text(Self.relativeTime(note.modifiedAt))
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(WoojColor.muted)
+                    .foregroundStyle(Appearance.text(note.colorToken).opacity(0.6))
                 Spacer()
                 if isShared {
                     Image(systemName: "person.2.fill")

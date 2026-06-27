@@ -102,6 +102,22 @@ final class NoteCardSnapshotTests: XCTestCase {
         assertCard(wrap(card))
     }
 
+    /// Pins the per-slot text-color behavior added 0.7.8: when the user
+    /// picks a theme whose slot has a *dark* background (e.g. Bold Berry's
+    /// Burgundy on slot 7), the card's preview text must render with the
+    /// palette's white-ink pair, not the wooj reading color (which is
+    /// hardcoded dark and reads as illegible black-on-near-black).
+    @MainActor
+    func testDarkSlot_UsesPaletteWhiteText() {
+        ThemeStore.shared.select("bold-berry")
+        defer { ThemeStore.shared.select("original") }
+        let card = NoteCard(
+            note: Note(content: "Should render in white ink — Burgundy slot.",
+                       colorToken: "7"),
+            store: EmptyStubStore())
+        assertCard(wrap(card))
+    }
+
     /// Regression test for the 0.5.21 preview-text strip pass: image
     /// Markdown refs (`![alt](attachment://UUID)`) should be replaced with
     /// the alt text in the card preview, not show the raw URL.
