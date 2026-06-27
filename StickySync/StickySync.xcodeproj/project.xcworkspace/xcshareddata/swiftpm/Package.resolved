@@ -1,5 +1,5 @@
 {
-  "originHash" : "cb4502904c7e1750631e82337861fb1736f7118864a1d85ea9fbe51738299510",
+  "originHash" : "cc5e1a6d6e0e32dc9f656d8ae71d00d70ff8dfa63fde3f230529bbb8885e7650",
   "pins" : [
     {
       "identity" : "sparkle",
@@ -20,12 +20,48 @@
       }
     },
     {
+      "identity" : "swift-custom-dump",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-custom-dump",
+      "state" : {
+        "revision" : "a8cd6c976f335ed361dcecddb0dc39ebda51bc3e",
+        "version" : "1.6.1"
+      }
+    },
+    {
+      "identity" : "swift-snapshot-testing",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-snapshot-testing",
+      "state" : {
+        "revision" : "ad5e3190cc63dc288f28546f9c6827efc1e9d495",
+        "version" : "1.19.2"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
+        "version" : "603.0.2"
+      }
+    },
+    {
       "identity" : "whisperkit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/argmaxinc/WhisperKit.git",
       "state" : {
         "branch" : "main",
         "revision" : "99d0a2fc9e95f5a1d736f4fb04144f9e1b3a4b33"
+      }
+    },
+    {
+      "identity" : "xctest-dynamic-overlay",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/xctest-dynamic-overlay",
+      "state" : {
+        "revision" : "401bf70d95bfe8db2a1dc619f9e175a85c089321",
+        "version" : "1.10.1"
       }
     }
   ],

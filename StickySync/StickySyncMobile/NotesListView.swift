@@ -292,7 +292,9 @@ private struct SearchField: View {
     }
 }
 
-private struct NoteCard: View {
+/// Visible to the test target so snapshot baselines can construct it
+/// directly. Stays internal to the module otherwise.
+struct NoteCard: View {
     let note: Note
     var isShared: Bool = false
     let store: NoteStore

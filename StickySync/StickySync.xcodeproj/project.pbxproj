@@ -13,11 +13,32 @@
 		A77762D42FE8A36E0088DECB /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A77762D32FE8A36E0088DECB /* WhisperKit */; };
 		A78F031F2FE88FCF00485C17 /* WoojTokens in Frameworks */ = {isa = PBXBuildFile; productRef = A78F031E2FE88FCF00485C17 /* WoojTokens */; };
 		A78F03212FE88FDC00485C17 /* WoojTokens in Frameworks */ = {isa = PBXBuildFile; productRef = A78F03202FE88FDC00485C17 /* WoojTokens */; };
+		A792D3692FEFFA9D00F1CBD3 /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = A792D3682FEFFA9D00F1CBD3 /* SnapshotTesting */; };
+		A792D36B2FEFFAA800F1CBD3 /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = A792D36A2FEFFAA800F1CBD3 /* SnapshotTesting */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A792D3552FEFF6F700F1CBD3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A70052352FE5C55D0081736C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A71D71602FE83172008D48F6;
+			remoteInfo = StickySyncMobile;
+		};
+		A792D3622FEFF71500F1CBD3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A70052352FE5C55D0081736C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A700523C2FE5C55D0081736C;
+			remoteInfo = StickySync;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A700523D2FE5C55D0081736C /* StickySync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StickySync.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A71D71612FE83172008D48F6 /* StickySyncMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StickySyncMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A792D3512FEFF6F700F1CBD3 /* StickySyncMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StickySyncMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A792D35E2FEFF71500F1CBD3 /* StickySyncTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StickySyncTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -42,6 +63,16 @@
 				A71D71782FE83292008D48F6 /* Exceptions for "StickySyncMobile" folder in "StickySyncMobile" target */,
 			);
 			path = StickySyncMobile;
+			sourceTree = "<group>";
+		};
+		A792D3522FEFF6F700F1CBD3 /* StickySyncMobileTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StickySyncMobileTests;
+			sourceTree = "<group>";
+		};
+		A792D35F2FEFF71500F1CBD3 /* StickySyncTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StickySyncTests;
 			sourceTree = "<group>";
 		};
 		A7BABE012FF000010000F00D /* Shared */ = {
@@ -72,6 +103,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A792D34E2FEFF6F700F1CBD3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A792D36B2FEFFAA800F1CBD3 /* SnapshotTesting in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A792D35B2FEFF71500F1CBD3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A792D3692FEFFA9D00F1CBD3 /* SnapshotTesting in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -81,6 +128,8 @@
 				A700523F2FE5C55D0081736C /* StickySync */,
 				A71D71622FE83172008D48F6 /* StickySyncMobile */,
 				A7BABE012FF000010000F00D /* Shared */,
+				A792D3522FEFF6F700F1CBD3 /* StickySyncMobileTests */,
+				A792D35F2FEFF71500F1CBD3 /* StickySyncTests */,
 				A71D71792FE833D7008D48F6 /* Frameworks */,
 				A700523E2FE5C55D0081736C /* Products */,
 			);
@@ -91,6 +140,8 @@
 			children = (
 				A700523D2FE5C55D0081736C /* StickySync.app */,
 				A71D71612FE83172008D48F6 /* StickySyncMobile.app */,
+				A792D3512FEFF6F700F1CBD3 /* StickySyncMobileTests.xctest */,
+				A792D35E2FEFF71500F1CBD3 /* StickySyncTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -157,6 +208,54 @@
 			productReference = A71D71612FE83172008D48F6 /* StickySyncMobile.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A792D3502FEFF6F700F1CBD3 /* StickySyncMobileTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A792D3592FEFF6F700F1CBD3 /* Build configuration list for PBXNativeTarget "StickySyncMobileTests" */;
+			buildPhases = (
+				A792D34D2FEFF6F700F1CBD3 /* Sources */,
+				A792D34E2FEFF6F700F1CBD3 /* Frameworks */,
+				A792D34F2FEFF6F700F1CBD3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A792D3562FEFF6F700F1CBD3 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A792D3522FEFF6F700F1CBD3 /* StickySyncMobileTests */,
+			);
+			name = StickySyncMobileTests;
+			packageProductDependencies = (
+				A792D36A2FEFFAA800F1CBD3 /* SnapshotTesting */,
+			);
+			productName = StickySyncMobileTests;
+			productReference = A792D3512FEFF6F700F1CBD3 /* StickySyncMobileTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A792D35D2FEFF71500F1CBD3 /* StickySyncTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A792D3642FEFF71500F1CBD3 /* Build configuration list for PBXNativeTarget "StickySyncTests" */;
+			buildPhases = (
+				A792D35A2FEFF71500F1CBD3 /* Sources */,
+				A792D35B2FEFF71500F1CBD3 /* Frameworks */,
+				A792D35C2FEFF71500F1CBD3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A792D3632FEFF71500F1CBD3 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A792D35F2FEFF71500F1CBD3 /* StickySyncTests */,
+			);
+			name = StickySyncTests;
+			packageProductDependencies = (
+				A792D3682FEFFA9D00F1CBD3 /* SnapshotTesting */,
+			);
+			productName = StickySyncTests;
+			productReference = A792D35E2FEFF71500F1CBD3 /* StickySyncTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -175,6 +274,14 @@
 						CreatedOnToolsVersion = 26.0;
 						LastSwiftMigration = 2600;
 					};
+					A792D3502FEFF6F700F1CBD3 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A71D71602FE83172008D48F6;
+					};
+					A792D35D2FEFF71500F1CBD3 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A700523C2FE5C55D0081736C;
+					};
 				};
 			};
 			buildConfigurationList = A70052382FE5C55D0081736C /* Build configuration list for PBXProject "StickySync" */;
@@ -191,6 +298,7 @@
 				A70052602FE6DC700081736C /* XCRemoteSwiftPackageReference "Sparkle" */,
 				A78F031D2FE88FCF00485C17 /* XCLocalSwiftPackageReference "../../../dev/wooj-tokens" */,
 				A77762D22FE8A36E0088DECB /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				A792D3672FEFFA9D00F1CBD3 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A700523E2FE5C55D0081736C /* Products */;
@@ -199,6 +307,8 @@
 			targets = (
 				A700523C2FE5C55D0081736C /* StickySync */,
 				A71D71602FE83172008D48F6 /* StickySyncMobile */,
+				A792D3502FEFF6F700F1CBD3 /* StickySyncMobileTests */,
+				A792D35D2FEFF71500F1CBD3 /* StickySyncTests */,
 			);
 		};
 /* End PBXProject section */
@@ -212,6 +322,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A71D715F2FE83172008D48F6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A792D34F2FEFF6F700F1CBD3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A792D35C2FEFF71500F1CBD3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -235,7 +359,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A792D34D2FEFF6F700F1CBD3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A792D35A2FEFF71500F1CBD3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A792D3562FEFF6F700F1CBD3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A71D71602FE83172008D48F6 /* StickySyncMobile */;
+			targetProxy = A792D3552FEFF6F700F1CBD3 /* PBXContainerItemProxy */;
+		};
+		A792D3632FEFF71500F1CBD3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A700523C2FE5C55D0081736C /* StickySync */;
+			targetProxy = A792D3622FEFF71500F1CBD3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A70052462FE5C5600081736C /* Debug */ = {
@@ -505,6 +656,93 @@
 			};
 			name = Release;
 		};
+		A792D3572FEFF6F700F1CBD3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BSPX8X9U4B;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = wooj.StickySyncMobileTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StickySyncMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StickySyncMobile";
+			};
+			name = Debug;
+		};
+		A792D3582FEFF6F700F1CBD3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BSPX8X9U4B;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = wooj.StickySyncMobileTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StickySyncMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StickySyncMobile";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A792D3652FEFF71500F1CBD3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BSPX8X9U4B;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = wooj.StickySyncTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StickySync.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StickySync";
+			};
+			name = Debug;
+		};
+		A792D3662FEFF71500F1CBD3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BSPX8X9U4B;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = wooj.StickySyncTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StickySync.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StickySync";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -531,6 +769,24 @@
 			buildConfigurations = (
 				A71D716A2FE83173008D48F6 /* Debug */,
 				A71D716B2FE83173008D48F6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A792D3592FEFF6F700F1CBD3 /* Build configuration list for PBXNativeTarget "StickySyncMobileTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A792D3572FEFF6F700F1CBD3 /* Debug */,
+				A792D3582FEFF6F700F1CBD3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A792D3642FEFF71500F1CBD3 /* Build configuration list for PBXNativeTarget "StickySyncTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A792D3652FEFF71500F1CBD3 /* Debug */,
+				A792D3662FEFF71500F1CBD3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -565,6 +821,14 @@
 				kind = branch;
 			};
 		};
+		A792D3672FEFFA9D00F1CBD3 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-snapshot-testing";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.19.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -594,6 +858,16 @@
 		A78F03202FE88FDC00485C17 /* WoojTokens */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = WoojTokens;
+		};
+		A792D3682FEFFA9D00F1CBD3 /* SnapshotTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A792D3672FEFFA9D00F1CBD3 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */;
+			productName = SnapshotTesting;
+		};
+		A792D36A2FEFFAA800F1CBD3 /* SnapshotTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A792D3672FEFFA9D00F1CBD3 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */;
+			productName = SnapshotTesting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

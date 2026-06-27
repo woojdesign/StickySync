@@ -49,7 +49,7 @@ Add a test here whenever:
   cover every slot" caught issues that would have silently broken theme
   switching).
 
-### 2. Snapshot tests — *not yet scaffolded; needs an Xcode test target*
+### 2. Snapshot tests
 
 Catches the class of bugs that compile-pass, build green, run zero-exit, and
 *look wrong*. Recent examples that snapshot tests would have caught the
@@ -61,25 +61,32 @@ first time they shipped:
   nothing.
 - Resize grip default 8×8 hit zone with click-through to the window behind.
 
-The library is `swift-snapshot-testing` (Pointfree). Industry usage: Airbnb's
-iOS app has ~30,000 snapshot tests, ~3× their unit-test count; Spotify and
-Shopify are in the 1,000+ range each.
+The library is `swift-snapshot-testing` (Pointfree, currently 1.19.2).
+Industry usage: Airbnb's iOS app has ~30,000 snapshot tests, ~3× their
+unit-test count; Spotify and Shopify are in the 1,000+ range each.
 
-**Next concrete step**: add `StickySyncTests` and `StickySyncMobileTests`
-Xcode test targets (File → New → Target → Unit Testing Bundle), pin
-`swift-snapshot-testing` as a Swift Package dependency on both, and seed
-with:
+**Mac (live)**: `StickySyncTests` target. Today covers `NoteContentView` at
+several sizes / themes / states. Run with `xcodebuild test -scheme StickySync`,
+sub-second per case. Baselines live next to the tests under
+`__Snapshots__/StickySyncTests/*.png` and are checked into the repo.
 
-- `NoteContentView` — 240×180 (default), 540×360 (release-sticky size), each
-  in Original / Classic / Dopamine / Muted themes, light + dark appearance,
-  with-attachment + without.
-- `NotesListView`'s `NoteCard` — with thumbnail, without thumbnail, shared
-  indicator on/off.
-- The release sticky's rendered Markdown in `NoteContentView` at a few sizes.
+**iOS (deferred)**: `StickySyncMobileTests` target exists but only carries a
+placeholder. The iOS simulator's sandbox doesn't expose the host's
+source-tree path at `/Users/.../StickySyncMobileTests/__Snapshots__/`, so
+`swift-snapshot-testing` writes succeed via the test-runner bridge but the
+sim can't `FileManager.fileExists` those paths on subsequent runs — every
+re-run silently re-records as if it were the first. The fix (when we have
+half a day to spare) is one of:
 
-That's ~30 baselines for v1. Each is a fixed-size render against a baseline
-PNG checked into the repo. The diff on a failing run shows you exactly which
-pixels moved.
+1. Bundle `__Snapshots__` as a test-target resource so reads go through
+   `Bundle.module` instead of an absolute host path.
+2. Override `snapshotDirectory:` to a sim-accessible path (`NSTemporaryDirectory`
+   or `Documents`) and ferry baselines into the sim with a pre-test script.
+3. Run UI tests as a Mac Catalyst target so the filesystem is shared.
+
+Until then, NotesKit unit tests + Mac snapshot tests + manual smoke cover
+most of the visual surface — most of the buggy rendering paths are in
+shared code we exercise through `NoteContentView` on Mac.
 
 Snapshot-test cadence: every visual bug fixed adds a baseline. Don't try to
 snapshot every view in the app — focus on the high-traffic surfaces (note
@@ -141,14 +148,14 @@ Counters we adopt:
 
 ## What lands on the CI checklist next
 
-In rough order, when we get there:
+In rough order:
 
-- [ ] Add `StickySyncTests` + `StickySyncMobileTests` Xcode test targets.
-- [ ] Pin `swift-snapshot-testing` as a dependency on both.
-- [ ] Seed snapshot baselines for `NoteContentView` and `NoteCard`.
+- [x] Add `StickySyncTests` + `StickySyncMobileTests` Xcode test targets.
+- [x] Pin `swift-snapshot-testing` as a dependency on both.
+- [x] Seed Mac snapshot baselines for `NoteContentView` (7 cases).
+- [ ] Fix the iOS sim-filesystem path issue (see iOS section above) and
+      seed `NoteCard` baselines.
 - [ ] Write `docs/smoke-test.md` with the pre-release manual run.
 - [ ] Add a GitHub Action that runs `swift test` (NotesKit) + the
-      snapshot tests on every push to `main`.
-
-Not yet, but soon: a `make test` target in the repo root that runs
-NotesKit + Mac snapshots + iOS snapshots in one command.
+      Mac snapshot tests on every push to `main`.
+- [ ] `make test` in the repo root that runs everything in one command.
