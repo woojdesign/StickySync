@@ -36,19 +36,29 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# `gh release create` (used by release.sh / testflight.sh) creates the tag
+# on the *remote* — never locally. Without an explicit fetch, this clone's
+# `git describe --tags` walks an older snapshot, falls back to a months-
+# old tag, and polishes a hundred commits that already shipped. Pull tags
+# every run so the "since" lookup sees the actual most-recent ship.
+git fetch --tags --quiet origin 2>/dev/null || true
+
 # Range: explicit --since wins, otherwise last platform-relevant tag..HEAD,
 # otherwise all of HEAD. Tag scheme:
 #   - Mac releases:  v0.3.1, v0.3.0, ... (unprefixed, existing convention)
 #   - iOS releases:  ios/v0.3.1, ios/v0.3.2, ...
 # Each platform's "since" lookup filters to its own tag namespace so a Mac
-# release doesn't pick up an iOS tag (or vice-versa).
+# release doesn't pick up an iOS tag (or vice-versa). `git describe`
+# follows --first-parent reachability which can also miss the latest tag
+# on a branch — use `git tag --sort=-v:refname --merged HEAD` instead so
+# we pick the highest-version tag actually reachable from this commit.
 if [ -n "$SINCE" ]; then
     RANGE="$SINCE..HEAD"
 else
     case "$PLATFORM" in
-        ios) LAST_TAG="$(git describe --tags --abbrev=0 --match 'ios/v*' 2>/dev/null || true)" ;;
-        mac) LAST_TAG="$(git describe --tags --abbrev=0 --match 'v*' --exclude 'ios/*' 2>/dev/null || true)" ;;
-        *)   LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)" ;;
+        ios) LAST_TAG="$(git tag --list 'ios/v*' --sort=-v:refname --merged HEAD | head -1)" ;;
+        mac) LAST_TAG="$(git tag --list 'v*' --sort=-v:refname --merged HEAD | grep -v '^ios/' | head -1)" ;;
+        *)   LAST_TAG="$(git tag --list --sort=-v:refname --merged HEAD | head -1)" ;;
     esac
     RANGE="${LAST_TAG:+$LAST_TAG..HEAD}"
     RANGE="${RANGE:-HEAD}"
