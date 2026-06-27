@@ -399,31 +399,66 @@ public final class MarkdownTextStorage: NSTextStorage {
     /// Re-styles `backing` directly (no edited() calls). Whoever invokes this
     /// is responsible for posting a single edited() afterward.
     private func restyleBacking(in range: NSRange) {
-        backing.removeAttribute(.strikethroughStyle, range: range)
-        backing.removeAttribute(.strikethroughColor, range: range)
-        backing.removeAttribute(.underlineStyle, range: range)
-        backing.removeAttribute(.link, range: range)
-        backing.removeAttribute(.markdownCheckboxState, range: range)
-        backing.removeAttribute(.markdownHideableMarker, range: range)
-        backing.removeAttribute(.paragraphStyle, range: range)
-        backing.setAttributes([
-            .font: baseFont,
-            .foregroundColor: textColor,
-        ], range: range)
+        // Walk the touched range and skip any FFFC attachment placeholder
+        // spans — the restyle pass below would otherwise stomp the
+        // `.attachment`, `.markdownAttachmentSource`, and
+        // `.markdownAttachmentID` attributes set by `insertAttachment` /
+        // `substituteAttachmentReferences`, and the inline image would
+        // silently disappear after the next edit cycle.
+        let nonAttachmentRanges = nonAttachmentSubranges(of: range)
+
+        for sub in nonAttachmentRanges {
+            backing.removeAttribute(.strikethroughStyle, range: sub)
+            backing.removeAttribute(.strikethroughColor, range: sub)
+            backing.removeAttribute(.underlineStyle, range: sub)
+            backing.removeAttribute(.link, range: sub)
+            backing.removeAttribute(.markdownCheckboxState, range: sub)
+            backing.removeAttribute(.markdownHideableMarker, range: sub)
+            backing.removeAttribute(.paragraphStyle, range: sub)
+            backing.setAttributes([
+                .font: baseFont,
+                .foregroundColor: textColor,
+            ], range: sub)
+        }
 
         let runs = MarkdownSyntax.parse(backing.string)
         for run in runs where run.style != MarkdownStyle() {
-            backing.addAttributes(attributes(for: run.style), range: run.range)
-            // Tag inline markers as hideable so the active-line fade pass
-            // can dim them when the cursor isn't on the same paragraph.
-            // List prefixes (`- `, `* `) intentionally aren't tagged —
-            // they're the visible bullet character itself.
-            if run.style.isMarker, run.style.listMarker == nil {
-                backing.addAttribute(.markdownHideableMarker, value: true, range: run.range)
+            // Clip each parsed run to the non-attachment portions so we
+            // don't restyle through an inline image.
+            for sub in nonAttachmentRanges {
+                guard let clipped = sub.intersection(run.range) else { continue }
+                backing.addAttributes(attributes(for: run.style), range: clipped)
+                if run.style.isMarker, run.style.listMarker == nil {
+                    backing.addAttribute(.markdownHideableMarker, value: true, range: clipped)
+                }
             }
         }
         markCheckboxSlots(in: range)
         applyHideableMarkerFade(in: range)
+    }
+
+    /// Returns the sub-ranges of `range` that don't intersect any
+    /// `.markdownAttachmentID` span. Used by `restyleBacking` to avoid
+    /// stomping the inline-image attachment attributes during a restyle.
+    private func nonAttachmentSubranges(of range: NSRange) -> [NSRange] {
+        var attachmentRanges: [NSRange] = []
+        backing.enumerateAttribute(.markdownAttachmentID, in: range, options: []) { value, attachmentRange, _ in
+            if value != nil { attachmentRanges.append(attachmentRange) }
+        }
+        if attachmentRanges.isEmpty { return [range] }
+
+        var out: [NSRange] = []
+        var cursor = range.location
+        for ar in attachmentRanges {
+            if ar.location > cursor {
+                out.append(NSRange(location: cursor, length: ar.location - cursor))
+            }
+            cursor = ar.upperBound
+        }
+        if cursor < range.upperBound {
+            out.append(NSRange(location: cursor, length: range.upperBound - cursor))
+        }
+        return out
     }
 
     /// Walk lines in `range`; for each line that starts with `- [ ] ` or
