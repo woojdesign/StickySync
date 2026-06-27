@@ -140,6 +140,23 @@ Counters we adopt:
    intentional, requires editing the test — which forces an explicit
    acknowledgement of the breaking change.
 
+6. **Read the exact failure message, not the status code.** Snapshot
+   libraries' first run is *always* reported as a "test failure" — that's
+   how the library signals "I just recorded a baseline; review and
+   re-run." The same red `FAIL` badge then covers a dozen different
+   actual conditions on subsequent runs: missing reference, render
+   mismatch, file-permission errors. The lesson, learned the hard way
+   while wiring up the iOS pipeline: don't infer from the status code
+   what the failure was. Always extract the actual assertion message
+   from the xcresult / log before forming a theory. The iOS pipeline
+   debug took two extra passes because the first failure said *"no
+   reference"* and the second said *"snapshot does not match reference"*
+   — I didn't notice they were different until I dumped the xcresult
+   verbatim. When the status code is the same but the message is
+   different, that's the bug. AI sessions are particularly prone to
+   pattern-matching on the status code and skipping the message; the
+   discipline is to read the *exact text* every time.
+
 ## What lands on the CI checklist next
 
 In rough order:
