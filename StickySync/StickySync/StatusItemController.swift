@@ -66,9 +66,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(themeSubmenu())
+        let whatsNew = NSMenuItem(title: "What’s new in StickySync",
+                                  action: #selector(showWhatsNew),
+                                  keyEquivalent: "")
+        whatsNew.target = self
+        menu.addItem(whatsNew)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit StickySync",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+    }
+
+    /// Drop the latest "what's new" sticky on demand (or open the existing
+    /// one if it's already in the store), and tell the host to bring its
+    /// window to the front so the user sees it immediately rather than
+    /// hunting the list.
+    var onShowWhatsNew: ((Note) -> Void)?
+    @objc private func showWhatsNew() {
+        guard let note = ReleaseNotes.dropLatest(into: store) else { return }
+        onShowWhatsNew?(note)
     }
 
     /// "Theme" submenu — one entry per bundled theme with a checkmark next to

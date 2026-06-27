@@ -167,6 +167,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onNewNote = { [weak self] in self?.newNote() }
         controller.onShowNote = { [weak self] id in self?.showNote(id) }
         controller.onShowList = { [weak self] in self?.showList() }
+        controller.onShowWhatsNew = { [weak self] note in
+            guard let self else { return }
+            // Make sure the (possibly newly-dropped) sticky has a window
+            // before we try to focus it.
+            if self.controllers[note.id] == nil {
+                self.openWindow(for: note, focus: true)
+            } else {
+                self.showNote(note.id)
+            }
+        }
         controller.isNoteOpen = { [weak self] id in self?.controllers[id] != nil }
         statusItemController = controller
     }
