@@ -69,6 +69,13 @@ struct NoteEditorView: View {
         }
         .onChange(of: note.content) { _ in
             hasLocalEdits = true
+            // Bump modifiedAt synchronously per keystroke so the LWW
+            // gate in the pending-remote flush sees our local state as
+            // newer immediately — not 400ms later when the debounced
+            // save fires. Without this, a stale-remote refresh arriving
+            // during the debounce window passes the "is remote newer?"
+            // check and wipes the in-flight paste/typing.
+            note.modifiedAt = Date()
             scheduleSave()
         }
         .onChange(of: model.notes) { _ in
@@ -80,10 +87,18 @@ struct NoteEditorView: View {
         }
         .onChange(of: focused) { isFocused in
             // Focus left the text view — the user has paused. Apply any
-            // pending remote update we held back during typing.
+            // pending remote update we held back during typing — but
+            // *only* if it's still newer than our current local state.
+            // The dabi paste-image-loss shape: pasted image at T0,
+            // stale-remote refresh arrived at T0+200ms and was held
+            // during typing, then flushed on focus-loss — wiping the
+            // paste. Now we drop the stale pending and let the next
+            // save push our newer state to CloudKit.
             if !isFocused, let pending = pendingRemoteUpdate {
-                applyRemote(pending)
                 pendingRemoteUpdate = nil
+                if pending.modifiedAt > note.modifiedAt {
+                    applyRemote(pending)
+                }
             }
         }
         .onDisappear { saveNow() }

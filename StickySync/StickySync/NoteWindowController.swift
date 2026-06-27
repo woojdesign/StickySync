@@ -164,11 +164,19 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             if isEditing {
                 // Hold off — don't yank the cursor mid-keystroke. Apply
                 // when the user pauses (textDidEndEditing) or when the
-                // window resigns key.
+                // window resigns key — and only then if the held remote
+                // is genuinely newer than our local state at that point.
                 pendingRemoteUpdate = updated
-            } else {
+            } else if updated.modifiedAt > note.modifiedAt {
+                // Not editing AND remote is newer → safe to apply
+                // directly. The newer-than gate prevents the dabi-style
+                // class of bug where a stale CloudKit import (the
+                // pre-paste version, arriving mid-paste-save debounce)
+                // wipes the local fresh paste.
                 applyRemoteContent(updated)
             }
+            // else: not editing but remote is older or equal — drop the
+            // refresh. Our local will push to CloudKit on the next save.
         } else {
             // No content change — still useful to update modifiedAt so
             // local LWW comparisons stay accurate.
@@ -192,10 +200,22 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     /// Flush any held-back remote update once the user has paused. Called
     /// from `textDidEndEditing` (focus left the text view) and
     /// `windowDidResignKey` (user moved to another window / app).
+    ///
+    /// LWW gate: only apply if the pending remote is genuinely newer
+    /// than what's in the editor *now*. By the time the user pauses,
+    /// their local edits (a paste, a few keystrokes) may carry a
+    /// `modifiedAt` newer than the pending — applying it would silently
+    /// revert their work. That's exactly the dabi paste-image-loss
+    /// shape: pasted image at T0, stale-remote refresh held during
+    /// typing, flushed on pause, image lost. Now we drop the stale
+    /// pending and let the next local save push our newer state to
+    /// CloudKit.
     private func flushPendingRemoteIfQuiescent() {
         guard let pending = pendingRemoteUpdate else { return }
+        pendingRemoteUpdate = nil
+        guard pending.modifiedAt > note.modifiedAt else { return }
         // Pause any in-flight local save so the remote isn't immediately
-        // overwritten by our debounced write of stale content.
+        // overwritten by our debounced write (now-stale-vs-remote).
         saveWorkItem?.cancel()
         applyRemoteContent(pending)
     }
