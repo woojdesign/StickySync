@@ -66,4 +66,33 @@ enum Appearance {
             return NSFont(name: name, size: size) ?? NSFont.systemFont(ofSize: size)
         }
     }
+
+    /// A small horizontal strip of the theme's 7 slot colors, suitable as
+    /// the leading icon of an NSMenuItem in the Theme submenu. The strip
+    /// turns a 15-item list of names into something you can scan at a
+    /// glance: visual recognition over textual memory.
+    @MainActor
+    static func themeSwatchImage(for theme: Theme) -> NSImage {
+        let size = NSSize(width: 84, height: 14)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+        let cellW = size.width / CGFloat(theme.colors.count)
+        for (i, color) in theme.colors.enumerated() {
+            NSColor.fromHex(color.lightBackgroundHex).setFill()
+            let rect = NSRect(
+                x: CGFloat(i) * cellW, y: 0,
+                width: cellW, height: size.height)
+            rect.fill()
+        }
+        // A subtle hairline so the strip reads as one unit against varying
+        // menu backgrounds (light/dark/Liquid Glass).
+        NSColor.black.withAlphaComponent(0.12).setStroke()
+        let border = NSBezierPath(rect: NSRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5))
+        border.lineWidth = 0.5
+        border.stroke()
+        // Don't tint to template — the swatch IS the content.
+        image.isTemplate = false
+        return image
+    }
 }

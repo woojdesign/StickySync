@@ -153,10 +153,18 @@ struct NotesListView: View {
                         ThemeStore.shared.select(t.id)
                     }
                 } label: {
-                    if t.id == theme.current.id {
-                        Label(t.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(t.displayName)
+                    // SwiftUI's Menu Button label supports a custom icon
+                    // via Label(title:icon:). The swatch strip turns the
+                    // 15-item list into a glanceable visual menu — name
+                    // + checkmark are still rendered by SwiftUI alongside.
+                    Label {
+                        if t.id == theme.current.id {
+                            Label(t.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(t.displayName)
+                        }
+                    } icon: {
+                        Image(uiImage: Appearance.themeSwatchImage(for: t))
                     }
                 }
             }

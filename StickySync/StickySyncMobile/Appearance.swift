@@ -92,6 +92,33 @@ enum Appearance {
     }
 
     static let iosReadingScale: CGFloat = 1.2
+
+    /// A small horizontal strip of the theme's 7 slot colors, suitable as
+    /// the leading icon of a `Label(title:icon:)` in the SwiftUI theme
+    /// Menu. Mirrors the macOS version in `StickySync/Appearance.swift`.
+    /// Renders via `UIGraphicsImageRenderer` at the screen scale so the
+    /// colors stay crisp on Retina; `.alwaysOriginal` so SwiftUI doesn't
+    /// re-tint the strip.
+    @MainActor
+    static func themeSwatchImage(for theme: Theme) -> UIImage {
+        let size = CGSize(width: 84, height: 14)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { ctx in
+            let cellW = size.width / CGFloat(theme.colors.count)
+            for (i, color) in theme.colors.enumerated() {
+                UIColor.fromHex(color.lightBackgroundHex).setFill()
+                let rect = CGRect(x: CGFloat(i) * cellW, y: 0,
+                                  width: cellW, height: size.height)
+                ctx.cgContext.fill(rect)
+            }
+            UIColor.black.withAlphaComponent(0.12).setStroke()
+            ctx.cgContext.setLineWidth(0.5)
+            ctx.cgContext.stroke(CGRect(origin: .zero, size: size).insetBy(dx: 0.25, dy: 0.25))
+        }.withRenderingMode(.alwaysOriginal)
+    }
 }
 
 extension UIColor {

@@ -400,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.target = self
             item.representedObject = t.id
             item.state = (t.id == currentID) ? .on : .off
+            item.image = Appearance.themeSwatchImage(for: t)
             sub.addItem(item)
         }
         return sub
