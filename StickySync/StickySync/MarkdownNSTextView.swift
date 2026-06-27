@@ -25,6 +25,12 @@ final class MarkdownNSTextView: NSTextView {
     }
     var attachmentContext: AttachmentContext?
 
+    /// Accept the very first mouse-down on an inactive window — without
+    /// this, clicking a note window from another app activates StickySync
+    /// but the click is swallowed by the activation cycle, leaving the
+    /// caret invisible until the user `⌘-Tab`s out and back in.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     /// Click on a `[ ]` / `[x]` slot toggles the checkbox without placing
     /// the cursor inside it. Clicks outside the slot fall through to the
     /// default selection behavior.
