@@ -186,6 +186,26 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             // No content change — still useful to update modifiedAt so
             // local LWW comparisons stay accurate.
             note.modifiedAt = max(note.modifiedAt, updated.modifiedAt)
+            // *Attachment-late-arrival race.* Per the 0.7.26 sync report
+            // from Sean's MacBook Air: attachments are separate CloudKit
+            // records and can land seconds-to-minutes after their
+            // parent note. When the note imported first and we set the
+            // editor's storage at window-open time, attachmentLoader
+            // returned nil for the not-yet-imported CDAttachment → the
+            // FFFC placeholder sat there empty. Subsequent CloudKit
+            // imports (including the one carrying the CDAttachment) fire
+            // refresh(from:) but content is unchanged, so applyRemote-
+            // Content wasn't called and the inline image never re-
+            // hydrated. Re-running substituteAttachmentReferences here
+            // picks up newly-available attachments — safe because it's
+            // idempotent (walks the source, ensures FFFC + attachment
+            // attributes match current image availability). Only when
+            // not editing, so a re-resolve mid-keystroke can't disturb
+            // the cursor / selection.
+            if updated.content.range(of: "attachment://", options: .caseInsensitive) != nil
+                && !isEditing {
+                noteView.markdownStorage.substituteAttachmentReferences()
+            }
         }
     }
 
