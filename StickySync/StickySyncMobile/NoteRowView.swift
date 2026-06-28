@@ -20,41 +20,40 @@ struct NoteRowView: View {
     var isShared: Bool = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Swatch — 22pt rounded rect, theme-resolved.
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Appearance.background(note.colorToken))
-                .frame(width: 22, height: 22)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(Color.black.opacity(0.08), lineWidth: 0.5)
-                )
+        // Per-slot text color so dark slots (Bold Berry's Burgundy,
+        // Sunny Beach's Slate, etc.) stay legible. Same per-slot pattern
+        // as NoteCard + the editor — keeps the family consistent.
+        let textColor = Appearance.text(note.colorToken)
 
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(NotePreviewText.title(for: note))
                     .font(.custom(WoojType.reading.family, size: 17).weight(.semibold))
-                    .foregroundStyle(WoojColor.ink)
+                    .foregroundStyle(textColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                let snip = NotePreviewText.snippet(for: note)
+                let snip = NotePreviewText.snippet2(for: note)
                 if !snip.isEmpty {
                     Text(snip)
-                        .font(.system(size: 13))
-                        .foregroundStyle(WoojColor.tertiary)
-                        .lineLimit(1)
+                        .font(.custom(WoojType.reading.family, size: 14))
+                        .foregroundStyle(textColor.opacity(0.7))
+                        .lineLimit(2)
                         .truncationMode(.tail)
+                        .multilineTextAlignment(.leading)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             // Meta column — date on top, shared/attachment icons below.
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 Text(NotePreviewText.relativeTime(for: note.modifiedAt))
                     .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(WoojColor.tertiary)
+                    .foregroundStyle(textColor.opacity(0.6))
                 HStack(spacing: 6) {
                     if isShared {
+                        // Shared indicator stays brand-clay (identity, not
+                        // text) so it pops the same on every theme.
                         Image(systemName: "person.2.fill")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(WoojColor.clay)
@@ -63,13 +62,28 @@ struct NoteRowView: View {
                     if NotePreviewText.hasAttachmentReference(note) {
                         Image(systemName: "paperclip")
                             .font(.system(size: 11))
-                            .foregroundStyle(WoojColor.tertiary)
+                            .foregroundStyle(textColor.opacity(0.7))
                             .accessibilityLabel("Has attachment")
                     }
                 }
             }
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, WoojSpace.md)
+        .padding(.vertical, WoojSpace.sm + 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // The row IS a card now — painted in the note's own sticky color.
+        // Sean's design call: "list items as cards in the color of their
+        // sticky." Drops the separate swatch chip; the whole row is the
+        // swatch.
+        .background(
+            Appearance.background(note.colorToken),
+            in: RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: WoojRadius.lg, style: .continuous)
+                .strokeBorder(WoojColor.clay.opacity(0.35), lineWidth: isShared ? 1 : 0)
+        )
+        .shadow(color: WoojColor.ink.opacity(0.06), radius: 6, y: 2)
         .contentShape(Rectangle())
     }
 }

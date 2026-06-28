@@ -26,6 +26,22 @@ enum NotePreviewText {
         return text.count > 60 ? String(text.prefix(60)) + "…" : text
     }
 
+    /// Two-line body snippet for the iOS list-mode rows. Joins the
+    /// first two non-empty lines after the title with a newline so the
+    /// receiving Text view can either render them as two visual lines
+    /// (paragraph break preserved) or wrap a single long line via
+    /// `lineLimit(2)`. Each line gets the same cleanup as `snippet`
+    /// (image-markdown collapsed, heading markers stripped).
+    static func snippet2(for note: Note) -> String {
+        let lines = note.content.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard lines.count > 1 else { return "" }
+        return Array(lines.dropFirst().prefix(2))
+            .map { cleanLineForPreview($0) }
+            .joined(separator: "\n")
+    }
+
     /// Body snippet: the next non-empty line after the title, with
     /// (1) `![alt](attachment://UUID)` collapsed to alt text and
     /// (2) heading markers stripped. Empty for notes that are just a
@@ -73,6 +89,18 @@ enum NotePreviewText {
     /// reference (the canonical inline-image form).
     static func hasAttachmentReference(_ note: Note) -> Bool {
         note.content.range(of: "attachment://", options: .caseInsensitive) != nil
+    }
+
+    /// Shared per-line cleanup for snippet rendering: strip image
+    /// markdown, strip leading heading markers. Used by both `snippet`
+    /// and `snippet2`.
+    private static func cleanLineForPreview(_ line: String) -> String {
+        let withoutImages = line.replacingOccurrences(
+            of: #"!\[([^\]]*)\]\(attachment://[^\)]+\)"#,
+            with: "$1",
+            options: .regularExpression)
+        return stripHeadingMarker(
+            withoutImages.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// Strip a leading CommonMark heading marker (`#`, `##`, … `######`)

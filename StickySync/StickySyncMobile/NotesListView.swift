@@ -78,15 +78,17 @@ struct NotesListView: View {
                         }
                         .padding(.horizontal, 16)
                     } else {
-                        // List mode — compact rows, swipe-to-delete.
-                        // Wrapped in LazyVStack instead of SwiftUI List so it
-                        // shares the same ScrollView + safeAreaInset
-                        // captureBar geometry as cards mode (List would
-                        // bring its own inset behavior and clash).
-                        LazyVStack(spacing: 0) {
+                        // List mode — full-width sticky-colored cards,
+                        // one per row. Wrapped in LazyVStack instead of
+                        // SwiftUI List so it shares the same ScrollView +
+                        // safeAreaInset captureBar geometry as cards
+                        // mode (List would bring its own inset behavior
+                        // and clash). Spacing is the same as cards mode
+                        // — the visual rhythm stays consistent across
+                        // the toggle.
+                        LazyVStack(spacing: 10) {
                             ForEach(filtered) { note in
                                 rowWithGestures(note)
-                                Divider().background(WoojColor.line)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -264,8 +266,6 @@ struct NotesListView: View {
     /// scroll/captureBar geometry.
     @ViewBuilder private func rowWithGestures(_ note: Note) -> some View {
         NoteRowView(note: note, isShared: model.sharedNoteIDs.contains(note.id))
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
             .onTapGesture { editing = note }
             .contextMenu {
                 Button { UIPasteboard.general.string = note.content } label: {
