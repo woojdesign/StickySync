@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import NotesKit
 import WoojTokens
+import OSLog
 
 /// Full-screen note editor in the wooj note-detail style + Capture's sticky
 /// language: the note's color fills the screen, a Charter `reading` body, a
@@ -97,7 +98,10 @@ struct NoteEditorView: View {
             if !isFocused, let pending = pendingRemoteUpdate {
                 pendingRemoteUpdate = nil
                 if pending.modifiedAt > note.modifiedAt {
+                    SyncLog.gate.info("flush \(SyncLog.short(self.note.id), privacy: .public): apply, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
                     applyRemote(pending)
+                } else {
+                    SyncLog.gate.info("flush \(SyncLog.short(self.note.id), privacy: .public): drop-overtaken, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
                 }
             }
         }
@@ -213,6 +217,7 @@ struct NoteEditorView: View {
         saveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard !Task.isCancelled else { return }
+            SyncLog.gate.info("save \(SyncLog.short(snapshot.id), privacy: .public): snapshot=\(SyncLog.ts(snapshot.modifiedAt), privacy: .public)")
             model.save(snapshot)
             hasLocalEdits = false
             // Save just landed → local store now matches our editor
@@ -238,7 +243,10 @@ struct NoteEditorView: View {
         guard let pending = pendingRemoteUpdate else { return }
         pendingRemoteUpdate = nil
         if pending.modifiedAt > note.modifiedAt {
+            SyncLog.gate.info("post-save \(SyncLog.short(self.note.id), privacy: .public): apply, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
             applyRemote(pending)
+        } else {
+            SyncLog.gate.info("post-save \(SyncLog.short(self.note.id), privacy: .public): drop-overtaken, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
         }
     }
 
@@ -264,6 +272,7 @@ struct NoteEditorView: View {
         guard modelVersion.modifiedAt > note.modifiedAt else { return }
 
         if hasLocalEdits {
+            SyncLog.gate.info("refresh \(SyncLog.short(self.note.id), privacy: .public): editing → stash, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) remote=\(SyncLog.ts(modelVersion.modifiedAt), privacy: .public)")
             // Hold off so we don't drop the user's in-flight characters.
             // Flushed when the debounced save completes (saveNow clears
             // hasLocalEdits) or focus leaves the text view, whichever
@@ -272,6 +281,7 @@ struct NoteEditorView: View {
             // applied.
             pendingRemoteUpdate = modelVersion
         } else {
+            SyncLog.gate.info("refresh \(SyncLog.short(self.note.id), privacy: .public): apply, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) remote=\(SyncLog.ts(modelVersion.modifiedAt), privacy: .public)")
             applyRemote(modelVersion)
         }
     }

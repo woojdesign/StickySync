@@ -1,6 +1,7 @@
 import AppKit
 import CloudKit
 import NotesKit
+import OSLog
 
 /// Owns one note's window and mediates between the view and the store.
 /// Everything it persists goes through the `NoteStore` protocol, so the
@@ -167,16 +168,20 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
                 // window resigns key — and only then if the held remote
                 // is genuinely newer than our local state at that point.
                 pendingRemoteUpdate = updated
+                SyncLog.gate.info("refresh \(SyncLog.short(self.note.id), privacy: .public): editing → stash, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) remote=\(SyncLog.ts(updated.modifiedAt), privacy: .public)")
             } else if updated.modifiedAt > note.modifiedAt {
                 // Not editing AND remote is newer → safe to apply
                 // directly. The newer-than gate prevents the dabi-style
                 // class of bug where a stale CloudKit import (the
                 // pre-paste version, arriving mid-paste-save debounce)
                 // wipes the local fresh paste.
+                SyncLog.gate.info("refresh \(SyncLog.short(self.note.id), privacy: .public): apply, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) remote=\(SyncLog.ts(updated.modifiedAt), privacy: .public)")
                 applyRemoteContent(updated)
+            } else {
+                // Not editing but remote is older or equal — drop the
+                // refresh. Our local will push to CloudKit on the next save.
+                SyncLog.gate.info("refresh \(SyncLog.short(self.note.id), privacy: .public): drop-stale, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) remote=\(SyncLog.ts(updated.modifiedAt), privacy: .public)")
             }
-            // else: not editing but remote is older or equal — drop the
-            // refresh. Our local will push to CloudKit on the next save.
         } else {
             // No content change — still useful to update modifiedAt so
             // local LWW comparisons stay accurate.
@@ -213,7 +218,11 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     private func flushPendingRemoteIfQuiescent() {
         guard let pending = pendingRemoteUpdate else { return }
         pendingRemoteUpdate = nil
-        guard pending.modifiedAt > note.modifiedAt else { return }
+        guard pending.modifiedAt > note.modifiedAt else {
+            SyncLog.gate.info("flush \(SyncLog.short(self.note.id), privacy: .public): drop-overtaken, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
+            return
+        }
+        SyncLog.gate.info("flush \(SyncLog.short(self.note.id), privacy: .public): apply, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
         // Pause any in-flight local save so the remote isn't immediately
         // overwritten by our debounced write (now-stale-vs-remote).
         saveWorkItem?.cancel()
@@ -284,6 +293,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         saveWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            SyncLog.gate.info("save \(SyncLog.short(self.note.id), privacy: .public): snapshot=\(SyncLog.ts(self.note.modifiedAt), privacy: .public)")
             self.store.update(self.note)
             // Save just landed → local store now matches our editor
             // state. If a remote update was held in pendingRemoteUpdate
@@ -312,7 +322,11 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     private func flushPendingRemoteIfNewer() {
         guard let pending = pendingRemoteUpdate else { return }
         pendingRemoteUpdate = nil
-        guard pending.modifiedAt > note.modifiedAt else { return }
+        guard pending.modifiedAt > note.modifiedAt else {
+            SyncLog.gate.info("post-save \(SyncLog.short(self.note.id), privacy: .public): drop-overtaken, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
+            return
+        }
+        SyncLog.gate.info("post-save \(SyncLog.short(self.note.id), privacy: .public): apply, local=\(SyncLog.ts(self.note.modifiedAt), privacy: .public) pending=\(SyncLog.ts(pending.modifiedAt), privacy: .public)")
         applyRemoteContent(pending)
     }
 
