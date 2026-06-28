@@ -88,4 +88,62 @@ final class MarkdownTextStorageTests: XCTestCase {
 
         XCTAssertEqual(storage.string, "hello world")
     }
+
+    // MARK: - setActiveLineRange invalidation scope (0.7.15 flicker fix)
+
+    /// Pins the union behavior that prevents the "content below flickers"
+    /// regression. Pre-fix, setActiveLineRange invalidated the *entire*
+    /// backing on every cursor move → every keystroke that moved the
+    /// cursor repainted the whole document → content below the edited
+    /// line flickered. Now we only touch the union of old + new active.
+    func testUnionRangeClamped_BothInsideBounds() {
+        let bounds = NSRange(location: 0, length: 100)
+        let a = NSRange(location: 10, length: 5)   // 10..15
+        let b = NSRange(location: 20, length: 5)   // 20..25
+        let u = MarkdownTextStorage.unionRangeClamped(a, b, in: bounds)
+        XCTAssertEqual(u.location, 10)
+        XCTAssertEqual(u.length, 15) // 25 - 10
+    }
+
+    func testUnionRangeClamped_OverlappingRanges() {
+        let bounds = NSRange(location: 0, length: 100)
+        let a = NSRange(location: 10, length: 10)  // 10..20
+        let b = NSRange(location: 15, length: 10)  // 15..25
+        let u = MarkdownTextStorage.unionRangeClamped(a, b, in: bounds)
+        XCTAssertEqual(u, NSRange(location: 10, length: 15)) // 10..25
+    }
+
+    func testUnionRangeClamped_OneNil_ReturnsOtherClamped() {
+        let bounds = NSRange(location: 0, length: 100)
+        let only = NSRange(location: 10, length: 5)
+        let u = MarkdownTextStorage.unionRangeClamped(nil, only, in: bounds)
+        XCTAssertEqual(u, only)
+    }
+
+    func testUnionRangeClamped_BothNil_ReturnsBounds() {
+        // Used when no previous active range and no new active range —
+        // shouldn't happen in practice (setActiveLineRange returns early
+        // when both are nil), but defensive default is full bounds.
+        let bounds = NSRange(location: 0, length: 100)
+        let u = MarkdownTextStorage.unionRangeClamped(nil, nil, in: bounds)
+        XCTAssertEqual(u, bounds)
+    }
+
+    func testUnionRangeClamped_OutOfBoundsClamps() {
+        let bounds = NSRange(location: 0, length: 50)
+        // Range extends past bounds.
+        let a = NSRange(location: 30, length: 40) // 30..70, past bounds
+        let u = MarkdownTextStorage.unionRangeClamped(a, nil, in: bounds)
+        XCTAssertEqual(u, NSRange(location: 30, length: 20)) // clamped to 30..50
+    }
+
+    func testClampRange_NegativeLength_ReturnsZeroLength() {
+        // A range entirely past the end of bounds clamps to a zero-length
+        // range at the bounds end — invalidateDisplay(0-length) is a no-op
+        // in AppKit/UIKit so this is the safe degenerate.
+        let bounds = NSRange(location: 0, length: 10)
+        let past = NSRange(location: 20, length: 5)
+        let clamped = MarkdownTextStorage.clampRange(past, to: bounds)
+        XCTAssertEqual(clamped.length, 0)
+    }
 }

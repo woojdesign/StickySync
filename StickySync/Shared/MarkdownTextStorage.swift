@@ -348,15 +348,28 @@ public final class MarkdownTextStorage: NSTextStorage {
     }
 
     /// Push a new "where the cursor is now" range into the storage and
-    /// re-apply marker fading for the whole document. Mutates `backing`
-    /// directly (no edited() call) — selection-driven, not text-driven,
-    /// so there's no edit cycle and the cursor doesn't move.
+    /// re-apply marker fading. Mutates `backing` directly (no `edited()`
+    /// call) — selection-driven, not text-driven, so there's no edit
+    /// cycle and the cursor doesn't move.
+    ///
+    /// **Flicker fix (0.7.15)**: the previous version restyled + invalidated
+    /// the **entire document** on every cursor move. Every keystroke moves
+    /// the cursor, so every keystroke repainted the whole document — the
+    /// content below a header flickered in and out as the layout manager
+    /// briefly cleared then re-drew everything outside the edited line.
+    /// Now we only touch the union of the *old* and *new* active ranges:
+    /// the only places where a marker's fade state could have changed.
+    /// Markers outside both ranges were "outside active" before and
+    /// "outside active" after — their visible/hidden state didn't change,
+    /// no work to do.
     public func setActiveLineRange(_ active: NSRange?) {
         if activeLineRange == active { return }
+        let previousActive = activeLineRange
         activeLineRange = active
         let full = NSRange(location: 0, length: backing.length)
         guard full.length > 0 else { return }
-        applyHideableMarkerFade(in: full)
+        let touchRange = unionRangeClamped(previousActive, active, in: full)
+        applyHideableMarkerFade(in: touchRange)
         // Deferred display invalidation — same pattern as processEditing,
         // for the same reason (calling invalidate methods inside an edit
         // cycle on iOS asserts; selection updates are outside an edit
@@ -364,9 +377,40 @@ public final class MarkdownTextStorage: NSTextStorage {
         let managers = layoutManagers
         DispatchQueue.main.async {
             for manager in managers {
-                manager.invalidateDisplay(forCharacterRange: full)
+                manager.invalidateDisplay(forCharacterRange: touchRange)
             }
         }
+    }
+
+    private func unionRangeClamped(_ a: NSRange?, _ b: NSRange?, in bounds: NSRange) -> NSRange {
+        Self.unionRangeClamped(a, b, in: bounds)
+    }
+
+    /// Smallest range covering both `a` and `b`, clamped to `bounds`.
+    /// `nil` inputs are treated as empty (so a single `nil` returns
+    /// the other clamped; both `nil` returns `bounds`). Pure function
+    /// — internal+static so `MarkdownTextStorageTests` can verify it
+    /// directly without standing up a full storage + layout manager.
+    /// Used by `setActiveLineRange` to compute the touch window:
+    /// only the union of old + new active ranges can possibly have
+    /// markers whose fade state changed.
+    static func unionRangeClamped(_ a: NSRange?, _ b: NSRange?, in bounds: NSRange) -> NSRange {
+        switch (a, b) {
+        case (nil, nil):
+            return bounds
+        case (let only?, nil), (nil, let only?):
+            return clampRange(only, to: bounds)
+        case (let lhs?, let rhs?):
+            let lo = min(lhs.location, rhs.location)
+            let hi = max(lhs.location + lhs.length, rhs.location + rhs.length)
+            return clampRange(NSRange(location: lo, length: hi - lo), to: bounds)
+        }
+    }
+
+    static func clampRange(_ range: NSRange, to bounds: NSRange) -> NSRange {
+        let loc = min(max(range.location, bounds.location), bounds.location + bounds.length)
+        let end = min(max(range.location + range.length, bounds.location), bounds.location + bounds.length)
+        return NSRange(location: loc, length: max(0, end - loc))
     }
 
     /// Walk hideable-marker ranges in `range`. For each one:
