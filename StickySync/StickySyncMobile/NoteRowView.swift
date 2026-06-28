@@ -18,6 +18,14 @@ import WoojTokens
 struct NoteRowView: View {
     let note: Note
     var isShared: Bool = false
+    /// SwiftUI skips re-running body when a struct's stored props are
+    /// unchanged. `note` doesn't change on a theme switch — only the
+    /// resolution of its `colorToken` does — so the row has to observe
+    /// the theme directly. NoteCard (grid mode) had this from the
+    /// start; the list-mode rows added in 0.7.19/0.7.20 were missing
+    /// it, which manifested as Sean's 0.7.32 sticky: "On iOS themes
+    /// only apply after restart." (Cards updated; rows didn't.)
+    @ObservedObject private var theme = ThemeStore.shared
 
     var body: some View {
         // Per-slot text color so dark slots (Bold Berry's Burgundy,
