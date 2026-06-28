@@ -170,6 +170,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(whatsNew)
         menu.addItem(aiAccessSubmenu())
         menu.addItem(.separator())
+        // Tier 1 verification surface — see Shared/SyncReport.swift.
+        // Lets non-technical testers send us a report bundle with the
+        // last 30 min of LWW gate events + current sync state without
+        // having to know how `log show` works.
+        let report = NSMenuItem(title: "Report a Sync Issue…",
+                                action: #selector(reportSyncIssue), keyEquivalent: "")
+        report.target = self
+        menu.addItem(report)
         menu.addItem(NSMenuItem(title: "Quit StickySync",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
     }
@@ -250,6 +258,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func pickTheme(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         ThemeStore.shared.select(id)
+    }
+
+    @objc private func reportSyncIssue() {
+        SyncReportComposer.shared.present(currentSyncState: syncStateString())
+    }
+
+    /// Stringify the SyncMonitor state for the report header without
+    /// coupling the report code to the enum's full type. "harmony" /
+    /// "syncing" / "offline" / "error.network" etc.
+    private func syncStateString() -> String {
+        switch sync.state {
+        case .harmony:               return "harmony"
+        case .syncing:               return "syncing"
+        case .offline:               return "offline"
+        case .error(let kind):       return "error.\(kind.rawValue)"
+        }
     }
 
     /// Sync menu-line copy. Returns nil in `.harmony` so the line is

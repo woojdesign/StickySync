@@ -340,6 +340,14 @@ final class MarkdownUITextView: UITextView {
         let index = offset(from: beginningOfDocument, to: position)
         guard let hit = MarkdownEditing.checkboxHit(in: storage, at: index) else { return }
         MarkdownEditing.applyCheckboxToggle(in: storage, hit: hit)
+        // The toggle mutated the storage directly (not via UIKit's input
+        // system), so `textViewDidChange` is *not* called. Without an
+        // explicit binding sync, `$note.content` stays at the pre-toggle
+        // value, the editor's debounced save fires with stale content,
+        // and the toggle is lost the moment the user navigates away.
+        // syncBindingFromStorage is the existing helper meant for exactly
+        // this class of mutation (paste-then-attach uses it too).
+        (delegate as? MarkdownTextView.Coordinator)?.syncBindingFromStorage()
     }
 
     override var keyCommands: [UIKeyCommand]? {

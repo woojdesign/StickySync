@@ -17,6 +17,7 @@ struct NotesListView: View {
     @State private var editing: Note?
     @State private var search = ""
     @State private var capturing = false
+    @State private var reportingSync = false
 
     private var filtered: [Note] {
         guard !search.isEmpty else { return model.notes }
@@ -81,6 +82,9 @@ struct NotesListView: View {
         .fullScreenCover(isPresented: $capturing) {
             CaptureSheet(store: model.sharedStore)
         }
+        .sheet(isPresented: $reportingSync) {
+            SyncReportComposerView(currentSyncState: syncStateString(sync.state))
+        }
         .onReceive(NotificationCenter.default.publisher(for: .startCapture)) { _ in
             // If the editor is already presented as a fullScreenCover, raising
             // the capture cover does nothing — SwiftUI shows one cover at a
@@ -130,7 +134,15 @@ struct NotesListView: View {
                     // "Synced" was overstating what we can actually verify.
                     if sync.state != .harmony {
                         Text("·")
+                        // Tap the non-harmony line → open the Tier 1 report
+                        // composer. This is the always-on path; future
+                        // Phase 2.d will add per-state deep-links to System
+                        // Settings (network → "go online", account → "sign
+                        // in", quota → "manage storage"). Reporting is the
+                        // fallback when none of those fix the underlying
+                        // issue.
                         syncStatus
+                            .onTapGesture { reportingSync = true }
                     }
                 }
                 .font(.system(size: 13))
@@ -219,6 +231,17 @@ struct NotesListView: View {
                     Label("Delete", systemImage: "trash")
                 }
             }
+    }
+
+    /// Stringify the SyncMonitor state for the report header. Stable
+    /// short strings so the recipient (Sean) can grep across reports.
+    private func syncStateString(_ state: SyncMonitor.State) -> String {
+        switch state {
+        case .harmony:           return "harmony"
+        case .syncing:           return "syncing"
+        case .offline:           return "offline"
+        case .error(let kind):   return "error.\(kind.rawValue)"
+        }
     }
 
     /// The non-harmony copy. Cause + fix in the same sentence; word is
