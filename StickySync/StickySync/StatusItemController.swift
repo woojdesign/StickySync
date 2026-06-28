@@ -54,8 +54,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let button = statusItem.button else { return }
         let base = NSImage(systemSymbolName: "note.text",
                            accessibilityDescription: "StickySync")!
-        button.image = composedIcon(base: base, overlay: overlaySymbol(for: sync.state))
-        button.image?.isTemplate = false   // overlay needs color, so non-template
+        // Harmony (the common case): hand the SF Symbol directly to the
+        // status item as a *template* image. The system then tints it
+        // black-on-light-menubar / white-on-dark-menubar automatically
+        // — exactly what Sean wants ("match the other menu-bar icons").
+        // Pre-fix we always went through the composed path with
+        // isTemplate = false, so the base drew as flat black against
+        // dark menu bars too.
+        let overlay = overlaySymbol(for: sync.state)
+        if overlay == nil {
+            button.image = base
+            button.image?.isTemplate = true
+        } else {
+            // Non-harmony needs a colored overlay dot, so the composed
+            // image has to be non-template (template strips color).
+            // The base inside the composed path now resolves the menu
+            // bar's effective appearance and draws in white/black to
+            // match.
+            button.image = composedIcon(base: base, overlay: overlay)
+            button.image?.isTemplate = false
+        }
     }
 
     /// Returns the overlay symbol + color for the *non-harmony* states.
@@ -74,14 +92,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// bottom-right. The two images are rendered into a single
     /// 18×18 NSImage at NSStatusItem's natural button size.
     private func composedIcon(base: NSImage, overlay: (String, NSColor)?) -> NSImage {
+        // Resolve the menu bar's effective appearance now (on the main
+        // thread, with NSApp's appearance live) so the base glyph draws
+        // in the right color when the off-screen NSImage drawing block
+        // runs. Inside that block, `NSColor.labelColor` resolves
+        // against a CG image context with no NSAppearance attached →
+        // falls back to *black*, which is invisible on a dark menu bar.
+        let isDarkMenuBar = NSApp.effectiveAppearance
+            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let baseColor: NSColor = isDarkMenuBar ? .white : .black
         let size = NSSize(width: 18, height: 18)
         return NSImage(size: size, flipped: false) { rect in
-            // Base glyph — tint to labelColor so the menu bar's auto
-            // light/dark inversion still feels natural.
+            // Base glyph — drawn in the menu-bar-appropriate color so
+            // the composed (non-template) image matches the rest of the
+            // status icons even though we lose the system's auto-tint.
             let baseConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
             let basePaletted = base.withSymbolConfiguration(baseConfig)!
             basePaletted.isTemplate = true
-            NSColor.labelColor.set()
+            baseColor.set()
             basePaletted.draw(in: rect, from: .zero,
                               operation: .sourceOver, fraction: 1.0,
                               respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
