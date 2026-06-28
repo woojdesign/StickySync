@@ -26,9 +26,20 @@ final class AudioRecorder: ObservableObject {
     @discardableResult
     func start(onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws -> URL {
         let session = AVAudioSession.sharedInstance()
-        // Built-in mic is enough for v1; routing AirPods/Bluetooth input is a
-        // later polish (the option constant churned across iOS versions).
-        try session.setCategory(.record, mode: .default)
+        // Allow Bluetooth input so AirPods (and other Bluetooth mics) get
+        // picked up when connected — without `.allowBluetoothHFP`, iOS
+        // falls back to the phone's built-in mic even with AirPods on,
+        // forcing the user to hold the phone up to talk (Sean's
+        // 0.7.27 report). The Hands-Free Profile is what carries the
+        // mic signal from BT devices; without explicitly opting in,
+        // AVAudioSession.record refuses to route through it. iOS 17
+        // renamed `.allowBluetooth` → `.allowBluetoothHFP` (same
+        // semantics, clearer name); we target iOS 26 so the new name
+        // is what compiles.
+        try session.setCategory(
+            .record,
+            mode: .default,
+            options: [.allowBluetoothHFP])
         try session.setActive(true)
 
         let input = engine.inputNode
