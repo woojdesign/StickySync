@@ -121,20 +121,27 @@ struct NoteEditorView: View {
     }
 
     private var topBar: some View {
-        HStack {
+        // Per-slot ink color — was hardcoded WoojColor.clay. On dark
+        // slots (Bold Berry's Burgundy, Sunny Beach's Slate, Earthy
+        // Forest's Deep Pine) the brand-clay orange blended into the
+        // dark sticky bg and the back / share / ⋯ controls were nearly
+        // invisible. Per-slot ink follows the same pattern body text +
+        // the captured-saved view already use (0.7.8 / 0.7.10).
+        let chromeColor = Appearance.text(note.colorToken)
+        return HStack {
             Button { saveNow(); dismiss() } label: {
                 HStack(spacing: 1) {
                     Image(systemName: "chevron.left").font(.system(size: 16, weight: .medium))
                     Text("Notes").font(.system(size: 17))
                 }
-                .foregroundStyle(WoojColor.clay)
+                .foregroundStyle(chromeColor)
             }
             Spacer()
             HStack(spacing: WoojSpace.lg) {
                 ShareLink(item: note.content) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(WoojColor.clay)
+                        .foregroundStyle(chromeColor)
                 }
                 Menu {
                     Button { showShareSheet = true } label: {
@@ -149,7 +156,7 @@ struct NoteEditorView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(WoojColor.clay)
+                        .foregroundStyle(chromeColor)
                 }
             }
         }

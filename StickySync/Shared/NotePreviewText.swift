@@ -15,32 +15,55 @@ import NotesKit
 
 enum NotePreviewText {
     /// First non-empty line, with markdown heading markers (`# `, `## `,
-    /// …) stripped and truncated to 60 chars. Falls back to "New note"
-    /// for empty notes.
+    /// …) stripped and truncated to `titleTruncationLength` chars.
+    /// Falls back to "New note" for empty notes.
     static func title(for note: Note) -> String {
         let lines = note.content.components(separatedBy: .newlines)
         let firstNonEmpty = lines.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let raw = (firstNonEmpty ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let stripped = stripHeadingMarker(raw)
         let text = stripped.isEmpty ? "New note" : stripped
-        return text.count > 60 ? String(text.prefix(60)) + "…" : text
+        return text.count > titleTruncationLength
+            ? String(text.prefix(titleTruncationLength)) + "…"
+            : text
     }
 
-    /// Two-line body snippet for the iOS list-mode rows. Joins the
-    /// first two non-empty lines after the title with a newline so the
-    /// receiving Text view can either render them as two visual lines
-    /// (paragraph break preserved) or wrap a single long line via
-    /// `lineLimit(2)`. Each line gets the same cleanup as `snippet`
-    /// (image-markdown collapsed, heading markers stripped).
+    /// Two-line body snippet for the iOS list-mode rows. Behavior:
+    ///
+    ///   - **Multi-line note**: joins the first two non-empty lines
+    ///     *after the title* with `\n` so the receiving Text view
+    ///     renders them as two visual lines (paragraph break preserved).
+    ///   - **Single-line note** whose only line overflows the title's
+    ///     60-char truncation: returns the overflow remainder
+    ///     (chars 60+) of the cleaned line so the snippet area
+    ///     continues the title text. Without this, a sticky like
+    ///     "buy milk eggs bread butter cheese yogurt apple banana
+    ///     blueberry oats granola cereal pasta tomato basil" rendered
+    ///     a truncated "buy milk eggs…" title and *no* snippet — the
+    ///     rest of the line was hidden until the editor was opened.
+    ///   - Each line gets the same cleanup: image-markdown collapsed,
+    ///     heading markers stripped.
     static func snippet2(for note: Note) -> String {
         let lines = note.content.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        guard lines.count > 1 else { return "" }
-        return Array(lines.dropFirst().prefix(2))
-            .map { cleanLineForPreview($0) }
-            .joined(separator: "\n")
+        if lines.count > 1 {
+            return Array(lines.dropFirst().prefix(2))
+                .map { cleanLineForPreview($0) }
+                .joined(separator: "\n")
+        }
+        // Single-line overflow case.
+        guard let only = lines.first else { return "" }
+        let cleaned = cleanLineForPreview(only)
+        guard cleaned.count > titleTruncationLength else { return "" }
+        let overflow = String(cleaned.dropFirst(titleTruncationLength))
+        return overflow.count > 120 ? String(overflow.prefix(120)) + "…" : overflow
     }
+
+    /// Where `title(for:)` truncates the title text. Exposed so
+    /// `snippet2` can compute the overflow continuation from the same
+    /// boundary, keeping the two visually contiguous.
+    static let titleTruncationLength = 60
 
     /// Body snippet: the next non-empty line after the title, with
     /// (1) `![alt](attachment://UUID)` collapsed to alt text and

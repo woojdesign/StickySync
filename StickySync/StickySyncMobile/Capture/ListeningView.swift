@@ -30,16 +30,31 @@ struct ListeningView: View {
     }
 
     private var topBar: some View {
-        HStack {
+        // `.firstTextBaseline` aligns the X icon to the timer's text
+        // baseline. Pre-fix the icon was wrapped in an explicit
+        // `.frame(width: 44, height: 44)` for the tap target — that
+        // 44pt-tall frame became the HStack's dominant child, so the
+        // timer text sat *centered within the icon's frame*, not on
+        // the same visual line as the icon. The visible glyphs ended
+        // up at slightly different y positions even though both were
+        // "centered." (Sean's 0.7.24 report.) Switch to padding for
+        // the tap target so the icon's intrinsic size + alignment
+        // guide put the two on the same baseline.
+        HStack(alignment: .firstTextBaseline) {
             Button(action: vm.cancel) {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(WoojColor.muted)
-                    .frame(width: 44, height: 44)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 14)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Cancel")
+            // The button's intrinsic firstTextBaseline lands at the
+            // icon's bottom edge; using its center as the baseline
+            // anchor lines up with the timer's text x-height.
+            .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] }
 
             Spacer()
 
