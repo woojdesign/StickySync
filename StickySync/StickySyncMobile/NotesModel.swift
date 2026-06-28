@@ -12,6 +12,13 @@ final class NotesModel: ObservableObject {
     /// this user or incoming shares accepted from someone else). Recomputed
     /// on every reload by asking the store. Empty for the JSON store.
     @Published private(set) var sharedNoteIDs: Set<UUID> = []
+    /// Bumps on every `reload()` — including reloads triggered by attachment
+    /// imports that don't change any visible note field. NoteCard's task
+    /// includes this in its id so a thumb-bearing attachment arriving after
+    /// its parent note re-fires the cover lookup. Without this, an
+    /// attachment landing seconds after its note left the card thumbless
+    /// until the user took some other action.
+    @Published private(set) var dataTick: UInt64 = 0
     private let store: NoteStore
 
     /// The one shared store, exposed so the capture surface writes through the
@@ -31,6 +38,7 @@ final class NotesModel: ObservableObject {
         // handled below so freshly-edited notes float to the top.
         notes = store.allNotes().sorted { $0.modifiedAt > $1.modifiedAt }
         sharedNoteIDs = Self.computeSharedNoteIDs(in: notes, store: store)
+        dataTick &+= 1
     }
 
     private static func computeSharedNoteIDs(in notes: [Note], store: NoteStore) -> Set<UUID> {

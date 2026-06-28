@@ -212,7 +212,14 @@ struct NoteEditorView: View {
         let snapshot = note
         saveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 400_000_000)
-            if !Task.isCancelled { model.save(snapshot) }
+            guard !Task.isCancelled else { return }
+            model.save(snapshot)
+            hasLocalEdits = false
+            // Save just landed → local store now matches our editor
+            // state. If a remote update was held during typing and is
+            // still newer than what we just saved, it's safe to apply
+            // now (modifiedAt comparison drops anything stale).
+            flushPendingRemoteIfNewer()
         }
     }
 
@@ -221,11 +228,34 @@ struct NoteEditorView: View {
         saveTask?.cancel()
         model.save(note)
         hasLocalEdits = false
+        flushPendingRemoteIfNewer()
+    }
+
+    /// Drop the pending remote if local state has overtaken it; apply
+    /// otherwise. Called after every save completes (the other natural
+    /// quiescence point besides focus-loss).
+    private func flushPendingRemoteIfNewer() {
+        guard let pending = pendingRemoteUpdate else { return }
+        pendingRemoteUpdate = nil
+        if pending.modifiedAt > note.modifiedAt {
+            applyRemote(pending)
+        }
     }
 
     /// Pull the model's current copy of this note. If it's newer than
-    /// what the editor is showing, either apply it (no local edits or
-    /// no focus) or stash it for later (user is typing).
+    /// what the editor is showing, apply it (no local edits) or stash
+    /// it for later (we have local edits worth protecting).
+    ///
+    /// The gate is `hasLocalEdits` *alone* — NOT `hasLocalEdits && focused`.
+    /// The earlier two-part gate had a race:
+    ///   1. user types (hasLocalEdits = true, focused = true)
+    ///   2. orientation rotates → focused = false (but local edits not saved)
+    ///   3. sync delivers a stale remote
+    ///   4. with the focus-check, we'd hit the `else` branch and apply,
+    ///      wiping the local edits
+    /// Local edits are what we're protecting; focus is just *one* signal
+    /// the user has paused. We hold-and-flush-on-pause, but we shouldn't
+    /// flush just because focus left for an unrelated reason.
     private func refreshFromStoreIfNewer() {
         guard let modelVersion = model.notes.first(where: { $0.id == note.id }) else {
             return
@@ -233,9 +263,13 @@ struct NoteEditorView: View {
         // No remote-newer signal — nothing to do.
         guard modelVersion.modifiedAt > note.modifiedAt else { return }
 
-        if hasLocalEdits && focused {
-            // Mid-typing: hold off so we don't yank the cursor or drop the
-            // user's in-flight characters. Apply when focus leaves.
+        if hasLocalEdits {
+            // Hold off so we don't drop the user's in-flight characters.
+            // Flushed when the debounced save completes (saveNow clears
+            // hasLocalEdits) or focus leaves the text view, whichever
+            // comes first — both gated on `modifiedAt > note.modifiedAt`
+            // so a since-overtaken pending is dropped rather than
+            // applied.
             pendingRemoteUpdate = modelVersion
         } else {
             applyRemote(modelVersion)

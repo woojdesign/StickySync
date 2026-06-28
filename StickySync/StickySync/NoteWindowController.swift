@@ -285,6 +285,15 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.store.update(self.note)
+            // Save just landed → local store now matches our editor
+            // state. If a remote update was held in pendingRemoteUpdate
+            // during typing and is still newer than what we just saved,
+            // it's safe to apply now (LWW gate inside drops anything
+            // stale). Without this, an inbound remote that arrived
+            // mid-typing was *silently lost* — the user kept editing,
+            // the save pushed stale content over the remote, and the
+            // pending never flushed because focus never left.
+            self.flushPendingRemoteIfNewer()
         }
         saveWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
@@ -293,6 +302,18 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     private func saveNow() {
         saveWorkItem?.cancel()
         store.update(note)
+        flushPendingRemoteIfNewer()
+    }
+
+    /// Drop the pending remote if local state has overtaken it; apply
+    /// otherwise. Called after every save completes — the other natural
+    /// quiescence point besides focus-loss/window-resign. The Mac
+    /// counterpart to NoteEditorView.flushPendingRemoteIfNewer on iOS.
+    private func flushPendingRemoteIfNewer() {
+        guard let pending = pendingRemoteUpdate else { return }
+        pendingRemoteUpdate = nil
+        guard pending.modifiedAt > note.modifiedAt else { return }
+        applyRemoteContent(pending)
     }
 
     // MARK: - Sharing

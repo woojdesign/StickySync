@@ -200,7 +200,8 @@ struct NotesListView: View {
     @ViewBuilder private func cardWithGestures(_ note: Note) -> some View {
         NoteCard(note: note,
                  isShared: model.sharedNoteIDs.contains(note.id),
-                 store: model.sharedStore)
+                 store: model.sharedStore,
+                 dataTick: model.dataTick)
             .onTapGesture { editing = note }
             .contextMenu {
                 Button { UIPasteboard.general.string = note.content } label: {
@@ -308,6 +309,15 @@ struct NoteCard: View {
     let note: Note
     var isShared: Bool = false
     let store: NoteStore
+    /// Bumps when CloudKit imports a change of *any* kind — including
+    /// attachments arriving for this note after the note itself synced.
+    /// `note.modifiedAt` doesn't change in that parent-then-attachment
+    /// race, so the cover-lookup `task(id:)` needs another signal to
+    /// re-fire. Threaded in from the parent's `model.dataTick` to keep
+    /// NoteCard independent of `NotesModel` (the @EnvironmentObject
+    /// dependency made the tests non-renderable). Defaults to 0 for
+    /// snapshot tests that don't care about late-attachment arrivals.
+    var dataTick: UInt64 = 0
     /// SwiftUI skips re-running body when a struct's stored props are
     /// unchanged. `note` doesn't change on a theme switch — only the
     /// resolution of its `colorToken` does — so the card has to observe
@@ -360,7 +370,7 @@ struct NoteCard: View {
         // the user just pasted an image inside the editor and returned to
         // the list. Keying on `note.id` alone never re-runs, so the card
         // would stay blank until the app relaunched.
-        .task(id: "\(note.id)|\(note.modifiedAt.timeIntervalSince1970)|\(note.content.count)") {
+        .task(id: "\(note.id)|\(note.modifiedAt.timeIntervalSince1970)|\(note.content.count)|\(dataTick)") {
             // Picks the first non-deleted attachment that's *still
             // referenced* by note.content as a cover. The reference check
             // matters because deleting the `![](attachment://UUID)` text
