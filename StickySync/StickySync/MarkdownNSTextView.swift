@@ -44,6 +44,21 @@ final class MarkdownNSTextView: NSTextView {
             // keep typing on the same line if they want, without it landing
             // inside the brackets.
             setSelectedRange(NSRange(location: hit.toggleRange.upperBound + 1, length: 0))
+            // The toggle mutated NSTextStorage directly, bypassing
+            // NSTextView's input system → textDidChange wouldn't fire
+            // → NoteWindowController.textDidChange wouldn't update
+            // `note.content` or schedule the save → the toggle was
+            // visible locally but never made it to CloudKit, never
+            // propagated to the user's other devices. Sean's report:
+            // "I've not seen a single instance where clicking the
+            // checkbox propagates changes to any other device."
+            //
+            // Post the same notification NSTextView would post on a
+            // genuine user edit so the delegate's textDidChange (and
+            // its downstream save) runs naturally. iOS had the
+            // analogous bug fixed in 0.7.14 via
+            // syncBindingFromStorage(); this is the AppKit equivalent.
+            NotificationCenter.default.post(name: NSText.didChangeNotification, object: self)
             return
         }
         super.mouseDown(with: event)
