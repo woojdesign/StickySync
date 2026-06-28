@@ -13,6 +13,10 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
     private let window: NSWindow
     private let tableView = NSTableView()
     private var notes: [Note] = []
+    /// Per-note cached "is shared" lookup. CloudKit's isShared(_:) is
+    /// cached metadata, but calling it once per row on every reload was
+    /// still noisier than necessary; we compute once on reload.
+    private var sharedIDs: Set<UUID> = []
 
     init(store: NoteStore) {
         self.store = store
@@ -53,8 +57,16 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
     }
 
     func reload() {
-        notes = store.allNotes()
+        notes = store.allNotes().sorted { $0.modifiedAt > $1.modifiedAt }
+        sharedIDs = computeSharedIDs(in: notes)
         tableView.reloadData()
+    }
+
+    private func computeSharedIDs(in notes: [Note]) -> Set<UUID> {
+        guard let ck = store as? CloudKitNoteStore else { return [] }
+        var ids: Set<UUID> = []
+        for n in notes where ck.isShared(n) { ids.insert(n.id) }
+        return ids
     }
 
     private func buildUI() {
@@ -66,7 +78,10 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
         scroll.drawsBackground = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 50
+        // Two-line row: title (15pt semibold) + snippet (12pt regular)
+        // + meta column on the right. 64pt gives comfortable breathing
+        // room without making the list feel sparse.
+        tableView.rowHeight = 64
         tableView.backgroundColor = .clear
         tableView.style = .inset
         tableView.dataSource = self
@@ -119,10 +134,31 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
             created.identifier = id
             return created
         }()
-        cell.configure(swatch: NotePreview.swatch(for: note.colorToken, size: 16),
-                       title: NotePreview.title(for: note),
-                       open: isNoteOpen?(note.id) ?? false)
+        cell.configure(
+            swatch: NotePreview.swatch(for: note.colorToken, size: 20),
+            title: NotePreview.title(for: note),
+            snippet: NotePreview.snippet(for: note),
+            modified: NotePreview.relativeTime(for: note.modifiedAt),
+            isShared: sharedIDs.contains(note.id),
+            hasAttachment: NotePreview.hasAttachmentReference(note),
+            isOpen: isNoteOpen?(note.id) ?? false)
+        cell.onDelete = { [weak self] in
+            guard let self else { return }
+            self.deleteWithConfirmation(note: note)
+        }
         return cell
+    }
+
+    private func deleteWithConfirmation(note: Note) {
+        let alert = NSAlert()
+        alert.messageText = "Delete this note?"
+        alert.informativeText = "“\(NotePreview.title(for: note))” will be removed from all your devices. This can’t be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            onDeleteNote?(note.id)
+        }
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
@@ -155,51 +191,148 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
     }
 }
 
-/// One row: color swatch, title, and open/closed status.
+/// One row: swatch | (title + snippet) | (date + share/attach indicators + hover trash).
+/// Designed at 64pt row height so two lines of text + meta column have room.
 final class NoteListCellView: NSView {
     private let swatchView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let statusLabel = NSTextField(labelWithString: "")
+    private let snippetLabel = NSTextField(labelWithString: "")
+    private let dateLabel = NSTextField(labelWithString: "")
+    private let sharedIcon = NSImageView()
+    private let attachmentIcon = NSImageView()
+    /// Hover-revealed trash — see hover/exit handlers. Standard Mac
+    /// affordance (Mail, Reminders). The bottom-bar Delete button is
+    /// kept as a keyboard-driven backup.
+    private let trashButton = NSButton()
+    private var trackingArea: NSTrackingArea?
+
+    /// Called when the user clicks the per-row trash. The controller
+    /// handles confirmation + dispatch to the store.
+    var onDelete: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+
         titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.font = .systemFont(ofSize: 13)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.maximumNumberOfLines = 1
         titleLabel.textColor = .woojInk
-        statusLabel.font = .systemFont(ofSize: 11)
-        statusLabel.textColor = .woojTertiary
 
-        let textStack = NSStackView(views: [titleLabel, statusLabel])
+        snippetLabel.lineBreakMode = .byTruncatingTail
+        snippetLabel.font = .systemFont(ofSize: 12)
+        snippetLabel.maximumNumberOfLines = 1
+        snippetLabel.textColor = .woojTertiary
+
+        let textStack = NSStackView(views: [titleLabel, snippetLabel])
         textStack.orientation = .vertical
         textStack.alignment = .leading
-        textStack.spacing = 1
+        textStack.spacing = 2
 
-        let hStack = NSStackView(views: [swatchView, textStack])
+        dateLabel.font = .systemFont(ofSize: 11)
+        dateLabel.textColor = .woojTertiary
+        dateLabel.alignment = .right
+
+        sharedIcon.image = NSImage(systemSymbolName: "person.2.fill", accessibilityDescription: "Shared")
+        sharedIcon.contentTintColor = .woojClay
+        sharedIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        sharedIcon.isHidden = true
+
+        attachmentIcon.image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "Has attachment")
+        attachmentIcon.contentTintColor = .woojTertiary
+        attachmentIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+        attachmentIcon.isHidden = true
+
+        let indicatorStack = NSStackView(views: [sharedIcon, attachmentIcon])
+        indicatorStack.orientation = .horizontal
+        indicatorStack.alignment = .centerY
+        indicatorStack.spacing = 6
+
+        let metaStack = NSStackView(views: [dateLabel, indicatorStack])
+        metaStack.orientation = .vertical
+        metaStack.alignment = .trailing
+        metaStack.spacing = 4
+
+        // Trash button: SF Symbol, borderless. Hidden by default; shown
+        // on hover via mouseEntered/mouseExited.
+        trashButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")
+        trashButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        trashButton.contentTintColor = .secondaryLabelColor
+        trashButton.isBordered = false
+        trashButton.bezelStyle = .accessoryBarAction
+        trashButton.target = self
+        trashButton.action = #selector(trashClicked)
+        trashButton.isHidden = true
+        trashButton.toolTip = "Delete this note"
+
+        let hStack = NSStackView(views: [swatchView, textStack, metaStack, trashButton])
         hStack.orientation = .horizontal
         hStack.alignment = .centerY
-        hStack.spacing = 9
+        hStack.spacing = 10
         hStack.translatesAutoresizingMaskIntoConstraints = false
         swatchView.setContentHuggingPriority(.required, for: .horizontal)
+        metaStack.setContentHuggingPriority(.required, for: .horizontal)
+        trashButton.setContentHuggingPriority(.required, for: .horizontal)
         addSubview(hStack)
         NSLayoutConstraint.activate([
-            hStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            hStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            hStack.centerYAnchor.constraint(equalTo: centerYAnchor)
+            hStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            hStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            hStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            swatchView.widthAnchor.constraint(equalToConstant: 20),
+            swatchView.heightAnchor.constraint(equalToConstant: 20)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func configure(swatch: NSImage, title: String, open: Bool) {
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let t = NSTrackingArea(rect: bounds,
+                               options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                               owner: self, userInfo: nil)
+        addTrackingArea(t)
+        trackingArea = t
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        trashButton.isHidden = false
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        trashButton.isHidden = true
+    }
+
+    @objc private func trashClicked() {
+        onDelete?()
+    }
+
+    func configure(swatch: NSImage,
+                   title: String,
+                   snippet: String,
+                   modified: String,
+                   isShared: Bool,
+                   hasAttachment: Bool,
+                   isOpen: Bool) {
         swatchView.image = swatch
         titleLabel.stringValue = title
-        statusLabel.stringValue = open ? "Open" : "Closed"
+        snippetLabel.stringValue = snippet
+        snippetLabel.isHidden = snippet.isEmpty
+        dateLabel.stringValue = modified
+        sharedIcon.isHidden = !isShared
+        attachmentIcon.isHidden = !hasAttachment
     }
 
     func setSelected(_ selected: Bool) {
-        titleLabel.textColor = selected ? .woojOnClay : .woojInk
-        statusLabel.textColor = selected ? NSColor.woojOnClay.withAlphaComponent(0.8) : .woojTertiary
+        let titleColor: NSColor = selected ? .woojOnClay : .woojInk
+        let secondaryColor: NSColor = selected
+            ? NSColor.woojOnClay.withAlphaComponent(0.8)
+            : .woojTertiary
+        titleLabel.textColor = titleColor
+        snippetLabel.textColor = secondaryColor
+        dateLabel.textColor = secondaryColor
+        // Indicator tints don't flip — they remain identifiable as
+        // brand colors against either bg (clay shared icon stays clay,
+        // attachment paperclip stays tertiary).
     }
 }
 
