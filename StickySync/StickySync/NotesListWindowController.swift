@@ -78,10 +78,11 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
         scroll.drawsBackground = false
 
         tableView.headerView = nil
-        // Two-line row: title (15pt semibold) + snippet (12pt regular)
-        // + meta column on the right. 64pt gives comfortable breathing
-        // room without making the list feel sparse.
-        tableView.rowHeight = 64
+        // Card-style rows (mirroring iOS list mode): each row is painted
+        // in its own sticky color, with title (15pt semibold) + a 2-line
+        // snippet (12pt). 80pt accommodates two snippet lines + meta
+        // column without crowding.
+        tableView.rowHeight = 80
         tableView.backgroundColor = .clear
         tableView.style = .inset
         tableView.dataSource = self
@@ -135,9 +136,9 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
             return created
         }()
         cell.configure(
-            swatch: NotePreview.swatch(for: note.colorToken, size: 20),
+            colorToken: note.colorToken,
             title: NotePreview.title(for: note),
-            snippet: NotePreview.snippet(for: note),
+            snippet: NotePreviewText.snippet2(for: note),
             modified: NotePreview.relativeTime(for: note.modifiedAt),
             isShared: sharedIDs.contains(note.id),
             hasAttachment: NotePreview.hasAttachmentReference(note),
@@ -191,20 +192,23 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
     }
 }
 
-/// One row: swatch | (title + snippet) | (date + share/attach indicators + hover trash).
-/// Designed at 64pt row height so two lines of text + meta column have room.
+/// One row, rendered as a *card in the note's own sticky color* — mirrors
+/// the iOS list mode (0.7.20). Drops the separate swatch chip; the whole
+/// row IS the swatch. Two-line snippet, per-slot text colors so dark
+/// themes (Bold Berry's Burgundy, Sunny Beach's Slate, etc.) stay legible.
+/// Designed at 80pt row height.
 final class NoteListCellView: NSView {
-    private let swatchView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let snippetLabel = NSTextField(labelWithString: "")
     private let dateLabel = NSTextField(labelWithString: "")
     private let sharedIcon = NSImageView()
     private let attachmentIcon = NSImageView()
-    /// Hover-revealed trash — see hover/exit handlers. Standard Mac
-    /// affordance (Mail, Reminders). The bottom-bar Delete button is
-    /// kept as a keyboard-driven backup.
     private let trashButton = NSButton()
     private var trackingArea: NSTrackingArea?
+
+    /// Currently rendered token — used to re-resolve dynamic colors on
+    /// theme switch / appearance change (see updateLayer).
+    private var currentColorToken: String = Palette.defaultToken
 
     /// Called when the user clicks the per-row trash. The controller
     /// handles confirmation + dispatch to the store.
@@ -212,16 +216,24 @@ final class NoteListCellView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        wantsLayer = true
+        // The card lives inside an 8pt-inset region (so adjacent cards
+        // breathe). Corner radius matches the iOS WoojRadius.lg of 14.
+        layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
 
         titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         titleLabel.maximumNumberOfLines = 1
-        titleLabel.textColor = .woojInk
 
+        // Two-line snippet — embedded \n in NotePreviewText.snippet2's
+        // output becomes a real line break. byTruncatingTail handles
+        // overflow on each line independently after word wrapping.
         snippetLabel.lineBreakMode = .byTruncatingTail
         snippetLabel.font = .systemFont(ofSize: 12)
-        snippetLabel.maximumNumberOfLines = 1
-        snippetLabel.textColor = .woojTertiary
+        snippetLabel.maximumNumberOfLines = 2
+        snippetLabel.cell?.wraps = true
+        snippetLabel.cell?.usesSingleLineMode = false
 
         let textStack = NSStackView(views: [titleLabel, snippetLabel])
         textStack.orientation = .vertical
@@ -229,7 +241,6 @@ final class NoteListCellView: NSView {
         textStack.spacing = 2
 
         dateLabel.font = .systemFont(ofSize: 11)
-        dateLabel.textColor = .woojTertiary
         dateLabel.alignment = .right
 
         sharedIcon.image = NSImage(systemSymbolName: "person.2.fill", accessibilityDescription: "Shared")
@@ -238,7 +249,6 @@ final class NoteListCellView: NSView {
         sharedIcon.isHidden = true
 
         attachmentIcon.image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "Has attachment")
-        attachmentIcon.contentTintColor = .woojTertiary
         attachmentIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
         attachmentIcon.isHidden = true
 
@@ -252,11 +262,8 @@ final class NoteListCellView: NSView {
         metaStack.alignment = .trailing
         metaStack.spacing = 4
 
-        // Trash button: SF Symbol, borderless. Hidden by default; shown
-        // on hover via mouseEntered/mouseExited.
         trashButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")
         trashButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-        trashButton.contentTintColor = .secondaryLabelColor
         trashButton.isBordered = false
         trashButton.bezelStyle = .accessoryBarAction
         trashButton.target = self
@@ -264,49 +271,48 @@ final class NoteListCellView: NSView {
         trashButton.isHidden = true
         trashButton.toolTip = "Delete this note"
 
-        let hStack = NSStackView(views: [swatchView, textStack, metaStack, trashButton])
+        let hStack = NSStackView(views: [textStack, metaStack, trashButton])
         hStack.orientation = .horizontal
-        hStack.alignment = .centerY
+        hStack.alignment = .top
         hStack.spacing = 10
         hStack.translatesAutoresizingMaskIntoConstraints = false
 
-        // Pin the row's geometry: swatch + metaStack + trash are fixed
-        // (high hugging, low compression resistance is fine); textStack
-        // takes ALL remaining horizontal space and truncates its labels
-        // when they overflow. Pre-fix, textStack was also hugging tight
-        // → with a short title like "dabi", the metaStack popped right
-        // up next to the title instead of pinning to the row's right
-        // edge. With a long title, the metaStack got pushed off-screen
-        // entirely (the dopamine + MONDAY rows showed no date at all).
-        swatchView.setContentHuggingPriority(.required, for: .horizontal)
+        // textStack expands to fill; meta + trash hug right. Mirrors the
+        // 0.7.18 fix that pinned the meta column to the right edge.
         metaStack.setContentHuggingPriority(.required, for: .horizontal)
         metaStack.setContentCompressionResistancePriority(.required, for: .horizontal)
         trashButton.setContentHuggingPriority(.required, for: .horizontal)
         textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        // Labels inside textStack — let them be truncated by the
-        // textStack's resize, instead of insisting on full width.
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         snippetLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         snippetLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         addSubview(hStack)
+        // Card inset: 6pt inset from the row's vertical extent (so cards
+        // separate visually), 14pt horizontal padding inside the card.
         NSLayoutConstraint.activate([
-            hStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            hStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            hStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            swatchView.widthAnchor.constraint(equalToConstant: 20),
-            swatchView.heightAnchor.constraint(equalToConstant: 20),
-            // Reserve a minimum width for the meta column so a single-word
-            // date like "yesterday" or "Wed" doesn't get crowded out by a
-            // greedy title — and so the right edge stays visually steady
-            // as titles vary.
+            hStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            hStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            hStack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            hStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
             metaStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 64)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func updateLayer() {
+        // Re-resolve the card bg + text colors against the *current*
+        // appearance (light/dark) so a system-appearance flip after the
+        // row was last configured still draws correctly. The cgColor
+        // computation needs an active NSAppearance.currentDrawing —
+        // happens naturally because updateLayer is called from inside
+        // an AppKit redraw.
+        layer?.backgroundColor = Appearance.background(for: currentColorToken).cgColor
+        applyTextColors()
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -330,51 +336,58 @@ final class NoteListCellView: NSView {
         onDelete?()
     }
 
-    func configure(swatch: NSImage,
+    func configure(colorToken: String,
                    title: String,
                    snippet: String,
                    modified: String,
                    isShared: Bool,
                    hasAttachment: Bool,
                    isOpen: Bool) {
-        swatchView.image = swatch
+        currentColorToken = colorToken
         titleLabel.stringValue = title
         snippetLabel.stringValue = snippet
         snippetLabel.isHidden = snippet.isEmpty
         dateLabel.stringValue = modified
         sharedIcon.isHidden = !isShared
         attachmentIcon.isHidden = !hasAttachment
+        // Mark layer dirty so updateLayer re-paints with the new token
+        // (background + text colors). Without this, switching themes
+        // wouldn't flow through to already-cached cells.
+        needsDisplay = true
+        applyTextColors()
+    }
+
+    /// Apply per-slot text colors. Public-ish because both updateLayer
+    /// and configure call it; they need to stay in sync.
+    private func applyTextColors() {
+        let inkColor = Appearance.text(for: currentColorToken)
+        titleLabel.textColor = inkColor
+        snippetLabel.textColor = inkColor.withAlphaComponent(0.7)
+        dateLabel.textColor = inkColor.withAlphaComponent(0.6)
+        attachmentIcon.contentTintColor = inkColor.withAlphaComponent(0.7)
+        trashButton.contentTintColor = inkColor.withAlphaComponent(0.7)
+        // Shared icon stays brand-clay — identity, not text. Reads
+        // legibly on every slot.
     }
 
     func setSelected(_ selected: Bool) {
-        let titleColor: NSColor = selected ? .woojOnClay : .woojInk
-        let secondaryColor: NSColor = selected
-            ? NSColor.woojOnClay.withAlphaComponent(0.8)
-            : .woojTertiary
-        titleLabel.textColor = titleColor
-        snippetLabel.textColor = secondaryColor
-        dateLabel.textColor = secondaryColor
-        // Indicator tints don't flip — they remain identifiable as
-        // brand colors against either bg (clay shared icon stays clay,
-        // attachment paperclip stays tertiary).
+        // No selection-fill on the card itself anymore; the row is
+        // already its own color. Slight rim glow on selection: kept the
+        // border subtle so it doesn't clash with the shared-note clay
+        // border that some rows already wear.
+        layer?.borderWidth = selected ? 2 : 0
+        layer?.borderColor = selected ? NSColor.woojClay.cgColor : nil
     }
 }
 
-/// Wooj chrome: each row is a warm `surface` card on the `ground`; the selected
-/// row fills with `clay` (and its text flips to `onClay`).
+/// Row chrome. Transparent now — each `NoteListCellView` paints its own
+/// sticky-colored card (0.7.21, matching iOS 0.7.20). Selection delegated
+/// to the cell, which draws a rim border instead of a fill (the cell
+/// already wears the note's color; flipping its bg on selection would
+/// hide the row's identity).
 final class WoojRowView: NSTableRowView {
-    override func drawBackground(in dirtyRect: NSRect) {
-        NSColor.woojSurface.usingColorSpace(.sRGB)?.setFill()
-        cardPath().fill()
-    }
-    override func drawSelection(in dirtyRect: NSRect) {
-        guard isSelected else { return }
-        NSColor.woojClay.usingColorSpace(.sRGB)?.setFill()
-        cardPath().fill()
-    }
-    private func cardPath() -> NSBezierPath {
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 6, dy: 3), xRadius: 8, yRadius: 8)
-    }
+    override func drawBackground(in dirtyRect: NSRect) {}
+    override func drawSelection(in dirtyRect: NSRect) {}
     override var isSelected: Bool {
         didSet { subviews.forEach { ($0 as? NoteListCellView)?.setSelected(isSelected) } }
     }
