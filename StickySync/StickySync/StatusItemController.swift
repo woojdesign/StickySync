@@ -58,12 +58,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         button.image?.isTemplate = false   // overlay needs color, so non-template
     }
 
+    /// Returns the overlay symbol + color for the *non-harmony* states.
+    /// `.harmony` returns nil — silence is the success signal. This is
+    /// the Bear / Things / Drafts convention surveyed in round-2 research.
     private func overlaySymbol(for state: SyncMonitor.State) -> (String, NSColor)? {
         switch state {
-        case .checking: return ("circle.dotted", .systemYellow)
+        case .harmony:  return nil
         case .syncing:  return ("arrow.triangle.2.circlepath", .systemBlue)
+        case .offline:  return ("cloud.slash.fill", .systemGray)
         case .error:    return ("exclamationmark.circle.fill", .systemRed)
-        case .idle, .synced: return nil
         }
     }
 
@@ -137,12 +140,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         listItem.target = self
         menu.addItem(listItem)
 
-        // Quiet sync-status line, so an eventual-consistency delay reads as
-        // "Syncing…" rather than "my note didn't sync."
-        let syncItem = NSMenuItem(title: syncTitle, action: nil, keyEquivalent: "")
-        syncItem.isEnabled = false
-        syncItem.image = syncImage
-        menu.addItem(syncItem)
+        // Sync line — only present when there's something to say. Silence
+        // (the `.harmony` state) is the success signal; showing "Synced"
+        // would be overstating what we can actually verify, and round-2
+        // research is unanimous that no respected app does this.
+        if let title = syncTitle {
+            let syncItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            syncItem.isEnabled = false
+            syncItem.image = syncImage
+            menu.addItem(syncItem)
+        }
 
         menu.addItem(.separator())
         let tidy = NSMenuItem(title: "Tidy Stickies",
@@ -245,24 +252,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         ThemeStore.shared.select(id)
     }
 
-    private var syncTitle: String {
+    /// Sync menu-line copy. Returns nil in `.harmony` so the line is
+    /// suppressed entirely. Failure copies follow the round-2 research
+    /// pattern: cause + fix in the same sentence, word is "Couldn't sync"
+    /// not "Sync error."
+    private var syncTitle: String? {
         switch sync.state {
-        case .checking: return "Checking iCloud…"
-        case .syncing:  return "Syncing…"
-        case .synced:   return "Synced"
-        case .error:    return "Sync paused"
-        case .idle:     return "iCloud"
+        case .harmony:        return nil
+        case .syncing:        return "Syncing…"
+        case .offline:        return "Offline — changes will sync when you're back"
+        case .error(.account): return "Sign in to iCloud to keep notes in sync"
+        case .error(.quota):  return "iCloud storage is full"
+        case .error(.network): return "Offline — changes will sync when you're back"
+        case .error(.unknown): return "Couldn't sync — will retry"
         }
     }
 
     private var syncImage: NSImage? {
         let name: String
         switch sync.state {
-        case .checking: name = "icloud"
+        case .harmony:  return nil
         case .syncing:  name = "arrow.triangle.2.circlepath"
-        case .synced:   name = "checkmark.icloud"
+        case .offline:  name = "cloud.slash"
         case .error:    name = "exclamationmark.icloud"
-        case .idle:     name = "icloud"
         }
         let img = NSImage(systemSymbolName: name, accessibilityDescription: syncTitle)
         img?.isTemplate = true

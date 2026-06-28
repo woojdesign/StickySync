@@ -2,74 +2,84 @@ import SwiftUI
 import CoreData
 import Combine
 
-/// Surfaces CloudKit sync state for a calm status line. On launch we start
-/// in `.checking` because the truth is we don't yet know whether something's
-/// pending on the server — NSPersistentCloudKitContainer doesn't fire an
-/// import event immediately; it relies on silent pushes that may have been
-/// held while the app was closed. Showing "Synced" before the first import
-/// confirmation would be a lie.
+/// iOS counterpart of the Mac `SyncMonitor` — same state machine, same
+/// state-mapping rules, just published as an `ObservableObject` so
+/// SwiftUI's `@StateObject` can wire it directly into a view.
 ///
-/// Listens to the `NSPersistentCloudKitContainer` event stream — the same
-/// events the store logs as "export ok" — and reduces them.
+/// See `StickySync/SyncMonitor.swift` for the design rationale. The
+/// short version: Bear's pattern — **silent success, loud failure**.
+/// `.harmony` renders nothing; the indicator only appears for
+/// `.syncing`, `.offline`, or `.error(_)`.
 @MainActor
 final class SyncMonitor: ObservableObject {
     enum State: Equatable {
-        case checking
-        case idle
+        case harmony
         case syncing
-        case synced(Date)
-        case error
+        case offline
+        case error(Kind)
+
+        enum Kind: String, Equatable {
+            case network
+            case account
+            case quota
+            case unknown
+        }
     }
 
-    @Published private(set) var state: State = .checking
+    @Published private(set) var state: State = .harmony
 
     private var active = Set<UUID>()
-    private var lastEnd: Date?
-    private var sawFirstImport = false
     private var cancellable: AnyCancellable?
-    /// Fall back to `.synced` after this long even without an import event,
-    /// so the indicator doesn't get stuck in `.checking` forever.
-    private let checkingTimeoutSeconds: TimeInterval = 30
 
     init() {
         cancellable = NotificationCenter.default
             .publisher(for: NSPersistentCloudKitContainer.eventChangedNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] note in self?.handle(note) }
-
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(checkingTimeoutSeconds * 1_000_000_000))
-            if case .checking = self.state {
-                self.state = .synced(self.lastEnd ?? Date())
-            }
-        }
     }
 
     private func handle(_ note: Notification) {
         guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
             as? NSPersistentCloudKitContainer.Event else { return }
 
-        let isImport = (event.type == .import)
+        // Ignore `.setup` (one-time bootstrap, not ongoing sync).
+        guard event.type != .setup else { return }
+
         let isStart = event.endDate == nil
 
         if isStart {
             active.insert(event.identifier)
         } else {
             active.remove(event.identifier)
-            lastEnd = event.endDate
-            if event.error != nil { state = .error; return }
-            if isImport { sawFirstImport = true }
+            if let error = event.error {
+                state = classify(error)
+                return
+            }
         }
 
-        if !active.isEmpty {
-            state = .syncing
-        } else if sawFirstImport, let lastEnd {
-            state = .synced(lastEnd)
-        } else if case .checking = state {
-            // Stay in checking — we've only seen exports, not yet been
-            // told there's nothing waiting for us.
-        } else if let lastEnd {
-            state = .synced(lastEnd)
+        let next: State = active.isEmpty ? .harmony : .syncing
+        if next != state {
+            state = next
+        }
+    }
+
+    private func classify(_ error: Error) -> State {
+        let nsError = error as NSError
+        let code: Int
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
+           underlying.domain == "CKErrorDomain" {
+            code = underlying.code
+        } else if nsError.domain == "CKErrorDomain" {
+            code = nsError.code
+        } else {
+            return .error(.unknown)
+        }
+        switch code {
+        case 3:  return .offline
+        case 4:  return .offline
+        case 9:  return .error(.account)
+        case 25: return .error(.quota)
+        default: return .error(.unknown)
         }
     }
 }

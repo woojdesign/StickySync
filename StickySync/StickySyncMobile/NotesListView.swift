@@ -125,7 +125,10 @@ struct NotesListView: View {
                     .foregroundStyle(WoojColor.ink)
                 HStack(spacing: 6) {
                     Text("^[\(model.notes.count) note](inflect: true)")
-                    if sync.state != .idle {
+                    // Only surface the sync line when there's something to
+                    // say. `.harmony` is the silent-success state; rendering
+                    // "Synced" was overstating what we can actually verify.
+                    if sync.state != .harmony {
                         Text("·")
                         syncStatus
                     }
@@ -218,18 +221,24 @@ struct NotesListView: View {
             }
     }
 
+    /// The non-harmony copy. Cause + fix in the same sentence; word is
+    /// "Couldn't sync" not "Sync error" (round-2 research convention).
     @ViewBuilder private var syncStatus: some View {
         switch sync.state {
-        case .checking:
-            HStack(spacing: 4) { Image(systemName: "icloud"); Text("Checking iCloud…") }
+        case .harmony:
+            EmptyView()
         case .syncing:
             HStack(spacing: 4) { Image(systemName: "arrow.triangle.2.circlepath"); Text("Syncing…") }
-        case .synced:
-            HStack(spacing: 4) { Image(systemName: "checkmark.icloud"); Text("Synced") }
-        case .error:
-            HStack(spacing: 4) { Image(systemName: "exclamationmark.icloud"); Text("Sync paused") }
-        case .idle:
-            EmptyView()
+        case .offline:
+            HStack(spacing: 4) { Image(systemName: "cloud.slash"); Text("Offline — changes will sync when you're back") }
+        case .error(.account):
+            HStack(spacing: 4) { Image(systemName: "person.crop.circle.badge.exclamationmark"); Text("Sign in to iCloud to keep notes in sync") }
+        case .error(.quota):
+            HStack(spacing: 4) { Image(systemName: "externaldrive.badge.exclamationmark"); Text("iCloud storage is full") }
+        case .error(.network):
+            HStack(spacing: 4) { Image(systemName: "cloud.slash"); Text("Offline — changes will sync when you're back") }
+        case .error(.unknown):
+            HStack(spacing: 4) { Image(systemName: "exclamationmark.icloud"); Text("Couldn't sync — will retry") }
         }
     }
 
