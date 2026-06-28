@@ -18,9 +18,26 @@ final class NoteContentViewSnapshotTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// Hold the hosting NSWindow alive past `makeNote(...)` so the view's
+    /// dynamic colors keep resolving during the snapshot capture. Without
+    /// this the window deallocates at end of scope and `currentDrawing()`
+    /// goes back to nil mid-snapshot.
+    private var hostingWindows: [NSWindow] = []
+
     /// Build a fully-configured NoteContentView at the given size and theme.
     /// Mirrors the production path enough that the resulting layout matches
     /// what a real note window renders.
+    ///
+    /// **Hosting-window dance** (was the cause of the 0.7.11 black-snapshot
+    /// regression): `NoteContentView.updateLayer()` sets its layer's
+    /// `backgroundColor` from `Appearance.background(for:).cgColor`. The
+    /// `Appearance.background(...)` is a *dynamic* `NSColor` whose resolver
+    /// block fires against `NSAppearance.currentDrawing()` — nil in a
+    /// headless XCTest env unless the view is attached to a window with an
+    /// explicit appearance. Resolved-to-nil → the cgColor renders as
+    /// transparent → snapshot captures the underlying black. Wrapping in a
+    /// hosting NSWindow with `.aqua` appearance forces the resolver to pick
+    /// the light variant, and we get the proper yellow/etc.
     @MainActor
     private func makeNote(text: String,
                           colorToken: String = "1",
@@ -35,32 +52,45 @@ final class NoteContentViewSnapshotTests: XCTestCase {
         view.textView.string = text
         let font = NSFont.systemFont(ofSize: 14)
         view.apply(colorToken: colorToken, font: font)
-        // Layout pass so subviews + the text container have their frames.
+
+        // Host in an off-screen NSWindow so dynamic-color resolution works.
+        // Borderless + zero shadow so the window chrome doesn't bleed into
+        // the snapshot capture.
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.isReleasedWhenClosed = false
+        window.hasShadow = false
+        window.backgroundColor = .clear
+        window.contentView = view
+        hostingWindows.append(window)
+
+        // Force layout + an immediate draw pass so updateLayer() fires and
+        // the dynamic color resolves with the window's appearance.
         view.layoutSubtreeIfNeeded()
+        view.needsDisplay = true
+        view.displayIfNeeded()
         return view
     }
 
+    override func tearDown() {
+        super.tearDown()
+        hostingWindows.removeAll()
+    }
+
     // MARK: - Baselines
-    //
-    // FIXME(0.7.11): Mac NoteContentView snapshot tests render BLACK in
-    // the headless XCTest env instead of the sticky's yellow background.
-    // Runtime rendering in the running app is correct (rule-7 launch
-    // checks pass every ship). The headless renderer appears to skip
-    // the view's appearance/trait collection without an enclosing
-    // NSWindow context — pre-existing regression that broke between
-    // 4c3656e (when baselines were recorded) and now. Skipping until
-    // we wire up a proper hosting NSWindow in `makeNote(text:)`.
 
     @MainActor
-    func testEmptyNote_Original_default() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testEmptyNote_Original_default() {
         let view = makeNote(text: "")
         assertSnapshot(of: view, as: .image)
     }
 
     @MainActor
-    func testShortNote_Original_default() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testShortNote_Original_default() {
         let view = makeNote(text: "buy milk")
         assertSnapshot(of: view, as: .image)
     }
@@ -70,16 +100,14 @@ final class NoteContentViewSnapshotTests: XCTestCase {
     /// If the textContainer override is reintroduced or the inset gets
     /// out of sync with the corner radius, this baseline will diff.
     @MainActor
-    func testLongLineWrap_Original_default() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testLongLineWrap_Original_default() {
         let view = makeNote(text: "this is a deliberately long single line meant to wrap and prove the text container respects the inset on the right edge of the note window",
                             width: 360, height: 180)
         assertSnapshot(of: view, as: .image)
     }
 
     @MainActor
-    func testListBody_Original_default() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testListBody_Original_default() {
         let body = """
         - [ ] first
         - [x] second
@@ -92,8 +120,7 @@ final class NoteContentViewSnapshotTests: XCTestCase {
     // MARK: - Theme drift guards
 
     @MainActor
-    func testShortNote_Classic_butter() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testShortNote_Classic_butter() {
         let view = makeNote(text: "tomato\nbasil\nmozzarella",
                             colorToken: "1",
                             themeID: "classic")
@@ -101,8 +128,7 @@ final class NoteContentViewSnapshotTests: XCTestCase {
     }
 
     @MainActor
-    func testShortNote_Dopamine_berry() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testShortNote_Dopamine_berry() {
         // Dopamine slot 3 is the magenta/pink with white ink. Pinning
         // this baseline catches any drift in either the bg hex or the
         // ink-color resolution path.
@@ -113,8 +139,7 @@ final class NoteContentViewSnapshotTests: XCTestCase {
     }
 
     @MainActor
-    func testShortNote_Muted_sage() throws {
-        try XCTSkipIf(true, "Mac headless snapshot env: NoteContentView renders without sticky bg — pre-existing, investigate separately")
+    func testShortNote_Muted_sage() {
         let view = makeNote(text: "Quiet thoughts",
                             colorToken: "6",
                             themeID: "muted")
