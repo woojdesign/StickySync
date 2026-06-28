@@ -46,45 +46,68 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// Base sticky-note glyph with a Dropbox-style overlay dot in the
     /// bottom-right corner that reflects sync state:
-    ///   - .checking → soft yellow (we don't yet know if we're caught up)
+    ///   - .harmony  → no overlay
     ///   - .syncing  → blue rotating accent (an operation is in flight)
+    ///   - .offline  → gray cloud.slash
     ///   - .error    → red exclamation
-    ///   - .synced / .idle → no overlay
-    /// Last-rendered (state, isDarkMenuBar) pair — refreshStatusIcon
-    /// skips the image rebuild if nothing visually changed. Sync events
-    /// fire frequently during active CloudKit work; rebuilding the
-    /// NSImage on every same-state notification was the source of the
-    /// menu-bar-icon flicker reported as the 0.7.28 regression.
-    private var lastRenderedState: SyncMonitor.State?
-    private var lastRenderedDarkMenuBar: Bool?
+    ///
+    /// Implementation note: the base glyph is a **template** image
+    /// (system auto-tints to match the menu bar — black on light, white
+    /// on dark, transparency-aware on the wallpaper-tracking variant).
+    /// The colored overlay dot lives in a **separate NSImageView
+    /// subview** of the status button so it can keep its own color
+    /// without forcing `isTemplate = false` on the whole image (which
+    /// would defeat the auto-tint). This is the only reliable way; the
+    /// 0.7.28/0.7.29 attempts to detect the menu bar's appearance from
+    /// outside (`NSApp.effectiveAppearance`, `button.effectiveAppearance`)
+    /// both gave wrong answers in transparent-menu-bar mode, so the
+    /// base painted as flat black on dark bars.
+    private let overlayBadge: NSImageView = {
+        let v = NSImageView()
+        v.translatesAutoresizingMaskIntoConstraints = false
+        v.isHidden = true
+        v.imageScaling = .scaleProportionallyDown
+        return v
+    }()
 
     private func refreshStatusIcon() {
         guard let button = statusItem.button else { return }
-        let isDark = button.effectiveAppearance
-            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
 
-        // Skip if neither the sync state nor the menu-bar appearance
-        // changed. Each `button.image = …` assignment triggers AppKit
-        // to invalidate + re-layout the status button → a visible
-        // flicker if the underlying NSImage isn't pixel-identical.
-        if sync.state == lastRenderedState && isDark == lastRenderedDarkMenuBar {
-            return
+        // Base glyph as a template image so the menu bar handles tinting
+        // natively — same path WiFi / clock / battery use.
+        if button.image == nil {
+            let base = NSImage(systemSymbolName: "note.text",
+                               accessibilityDescription: "StickySync")
+            base?.isTemplate = true
+            button.image = base
+            button.imagePosition = .imageOnly
         }
-        lastRenderedState = sync.state
-        lastRenderedDarkMenuBar = isDark
 
-        let base = NSImage(systemSymbolName: "note.text",
-                           accessibilityDescription: "StickySync")!
-        // Unified render path: always go through `composedIcon` so the
-        // underlying NSImage type and colors stay consistent across
-        // state transitions. Pre-fix (0.7.28) we branched between
-        // template (harmony) and composed (non-harmony) → every
-        // harmony↔syncing flip swapped image type → visible flicker
-        // during active sync (Sean's report).
-        button.image = composedIcon(base: base,
-                                    overlay: overlaySymbol(for: sync.state),
-                                    isDarkMenuBar: isDark)
-        button.image?.isTemplate = false
+        // Lazily attach the overlay badge subview once the button
+        // exists. NSStatusBarButton is an NSButton; subviews layer on
+        // top of its image and Auto Layout positions them.
+        if overlayBadge.superview == nil {
+            button.addSubview(overlayBadge)
+            NSLayoutConstraint.activate([
+                overlayBadge.widthAnchor.constraint(equalToConstant: 10),
+                overlayBadge.heightAnchor.constraint(equalToConstant: 10),
+                overlayBadge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
+                overlayBadge.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -2),
+            ])
+        }
+
+        // Update the overlay's image + color to match the current state.
+        if let (symbolName, color) = overlaySymbol(for: sync.state),
+           let badgeImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+            // Non-template so we can color it ourselves; tinted via
+            // contentTintColor (NSImageView understands).
+            badgeImage.isTemplate = false
+            overlayBadge.image = badgeImage
+            overlayBadge.contentTintColor = color
+            overlayBadge.isHidden = false
+        } else {
+            overlayBadge.isHidden = true
+        }
     }
 
     /// Returns the overlay symbol + color for the *non-harmony* states.
@@ -99,54 +122,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Compose the base symbol with a small overlay symbol in the
-    /// bottom-right. The two images are rendered into a single
-    /// 18×18 NSImage at NSStatusItem's natural button size.
-    private func composedIcon(base: NSImage, overlay: (String, NSColor)?, isDarkMenuBar: Bool) -> NSImage {
-        // Base glyph color is picked from the *caller's* resolution of
-        // the menu-bar appearance (the status button's
-        // effectiveAppearance — which tracks the menu bar correctly,
-        // unlike NSApp.effectiveAppearance which follows the app's own
-        // appearance). Inside the off-screen NSImage drawing block,
-        // `NSColor.labelColor` would otherwise resolve against a CG
-        // context with no NSAppearance attached → fall back to black,
-        // invisible on a dark menu bar.
-        let baseColor: NSColor = isDarkMenuBar ? .white : .black
-        let size = NSSize(width: 18, height: 18)
-        return NSImage(size: size, flipped: false) { rect in
-            // Base glyph — drawn in the menu-bar-appropriate color so
-            // the composed (non-template) image matches the rest of the
-            // status icons even though we lose the system's auto-tint.
-            let baseConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-            let basePaletted = base.withSymbolConfiguration(baseConfig)!
-            basePaletted.isTemplate = true
-            baseColor.set()
-            basePaletted.draw(in: rect, from: .zero,
-                              operation: .sourceOver, fraction: 1.0,
-                              respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
-
-            // Overlay dot in the bottom-right.
-            guard let overlay else { return true }
-            let (name, color) = overlay
-            guard let badge = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return true }
-            let badgeConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
-            let badgeSized = badge.withSymbolConfiguration(badgeConfig)!
-            let badgeRect = NSRect(x: rect.maxX - 10, y: 0, width: 10, height: 10)
-
-            // White ring behind the badge so it stays legible on top of
-            // the dark/light menu bar — mirrors how Dropbox draws its
-            // sync dot.
-            let ring = NSBezierPath(ovalIn: badgeRect.insetBy(dx: -1, dy: -1))
-            NSColor.windowBackgroundColor.setFill()
-            ring.fill()
-
-            color.set()
-            badgeSized.draw(in: badgeRect, from: .zero,
-                            operation: .sourceOver, fraction: 1.0,
-                            respectFlipped: true, hints: nil)
-            return true
-        }
-    }
+    // composedIcon removed in 0.7.30 — see refreshStatusIcon's doc
+    // comment for why the off-screen-composed approach can't reliably
+    // resolve the menu-bar appearance.
 
     // Rebuilt every time the menu opens, so it always reflects current notes.
     func menuNeedsUpdate(_ menu: NSMenu) {
