@@ -18,6 +18,17 @@ struct NotesListView: View {
     @State private var search = ""
     @State private var capturing = false
     @State private var reportingSync = false
+    /// Cards vs. List. Persisted per device — switching surfaces is a
+    /// preference, not state we sync across devices (the Mac all-notes
+    /// view is its own thing, so cross-device alignment isn't a goal).
+    /// Cards stay the default per Sean's call: existing users see no
+    /// change unless they opt in.
+    @AppStorage("design.wooj.StickySync.iosListMode") private var listMode: ListMode = .cards
+
+    enum ListMode: String {
+        case cards
+        case list
+    }
 
     private var filtered: [Note] {
         guard !search.isEmpty else { return model.notes }
@@ -47,7 +58,7 @@ struct NotesListView: View {
                         emptyState
                             .frame(maxWidth: .infinity)
                             .padding(.top, 64)
-                    } else {
+                    } else if listMode == .cards {
                         LazyVStack(spacing: 14) {
                             ForEach(rows.indices, id: \.self) { rowIndex in
                                 let row = rows[rowIndex]
@@ -63,6 +74,19 @@ struct NotesListView: View {
                                         Color.clear.frame(maxWidth: .infinity)
                                     }
                                 }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    } else {
+                        // List mode — compact rows, swipe-to-delete.
+                        // Wrapped in LazyVStack instead of SwiftUI List so it
+                        // shares the same ScrollView + safeAreaInset
+                        // captureBar geometry as cards mode (List would
+                        // bring its own inset behavior and clash).
+                        LazyVStack(spacing: 0) {
+                            ForEach(filtered) { note in
+                                rowWithGestures(note)
+                                Divider().background(WoojColor.line)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -150,11 +174,33 @@ struct NotesListView: View {
                 .animation(WoojMotion.calm.animation, value: sync.state)
             }
             Spacer(minLength: 12)
-            themePicker
-                .padding(.top, 10)
+            HStack(spacing: 8) {
+                listModeToggle
+                themePicker
+            }
+            .padding(.top, 10)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+
+    /// Cards ↔ list toggle. SF Symbol button that flips the @AppStorage
+    /// preference. Cards is the default; list is opt-in. Animation is
+    /// the calm spring so the switch feels considered, not jumpy.
+    private var listModeToggle: some View {
+        Button {
+            withAnimation(WoojMotion.calm.animation) {
+                listMode = (listMode == .cards) ? .list : .cards
+            }
+        } label: {
+            Image(systemName: listMode == .cards ? "list.bullet" : "square.grid.2x2")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(WoojColor.ink)
+                .frame(width: 36, height: 36)
+                .background(Capsule().fill(WoojColor.surface))
+                .overlay(Capsule().stroke(WoojColor.line, lineWidth: 0.5))
+        }
+        .accessibilityLabel(listMode == .cards ? "Switch to list view" : "Switch to card view")
     }
 
     /// Compact swatch trio that opens a Menu of available themes. Lives in the
@@ -210,6 +256,32 @@ struct NotesListView: View {
 
     /// Calm CloudKit sync state, so an eventual-consistency delay reads as
     /// "Syncing…" rather than "my note didn't save."
+    /// One list row with its tap target + context-menu actions. Swipe-
+    /// to-delete deferred: `.swipeActions` requires a real SwiftUI `List`
+    /// container (no-ops inside `LazyVStack`). For 0.7.19 we ship the
+    /// list-mode toggle with long-press delete; if swipe is desired,
+    /// migrating to `List` is its own follow-up since it changes the
+    /// scroll/captureBar geometry.
+    @ViewBuilder private func rowWithGestures(_ note: Note) -> some View {
+        NoteRowView(note: note, isShared: model.sharedNoteIDs.contains(note.id))
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .onTapGesture { editing = note }
+            .contextMenu {
+                Button { UIPasteboard.general.string = note.content } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                ShareLink(item: note.content) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                Button(role: .destructive) {
+                    model.delete(note)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+    }
+
     /// One card with its tap target + context menu attached. Extracted from
     /// the row loop so the body stays scannable.
     @ViewBuilder private func cardWithGestures(_ note: Note) -> some View {
