@@ -269,16 +269,40 @@ final class NoteListCellView: NSView {
         hStack.alignment = .centerY
         hStack.spacing = 10
         hStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Pin the row's geometry: swatch + metaStack + trash are fixed
+        // (high hugging, low compression resistance is fine); textStack
+        // takes ALL remaining horizontal space and truncates its labels
+        // when they overflow. Pre-fix, textStack was also hugging tight
+        // → with a short title like "dabi", the metaStack popped right
+        // up next to the title instead of pinning to the row's right
+        // edge. With a long title, the metaStack got pushed off-screen
+        // entirely (the dopamine + MONDAY rows showed no date at all).
         swatchView.setContentHuggingPriority(.required, for: .horizontal)
         metaStack.setContentHuggingPriority(.required, for: .horizontal)
+        metaStack.setContentCompressionResistancePriority(.required, for: .horizontal)
         trashButton.setContentHuggingPriority(.required, for: .horizontal)
+        textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Labels inside textStack — let them be truncated by the
+        // textStack's resize, instead of insisting on full width.
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        snippetLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        snippetLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         addSubview(hStack)
         NSLayoutConstraint.activate([
             hStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             hStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             hStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             swatchView.widthAnchor.constraint(equalToConstant: 20),
-            swatchView.heightAnchor.constraint(equalToConstant: 20)
+            swatchView.heightAnchor.constraint(equalToConstant: 20),
+            // Reserve a minimum width for the meta column so a single-word
+            // date like "yesterday" or "Wed" doesn't get crowded out by a
+            // greedy title — and so the right edge stays visually steady
+            // as titles vary.
+            metaStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 64)
         ])
     }
 

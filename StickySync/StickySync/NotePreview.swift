@@ -17,10 +17,12 @@ enum NotePreview {
         return text.count > 60 ? String(text.prefix(60)) + "…" : text
     }
 
-    /// Body snippet: the next non-empty line after the title, with the
-    /// `![alt](attachment://UUID)` references collapsed to their alt text
-    /// (or hidden if no alt) so the row stays scannable. Empty string if
-    /// the note has no body beyond its title.
+    /// Body snippet: the next non-empty line after the title, with both
+    /// (1) `![alt](attachment://UUID)` references collapsed to their alt
+    /// text and (2) markdown heading markers (`#`, `##`, …) stripped, so
+    /// a sticky whose second line is `## The bind` shows as "The bind"
+    /// in the list — not the raw markdown. Empty string if the note has
+    /// no body beyond its title.
     static func snippet(for note: Note) -> String {
         let lines = note.content.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -33,8 +35,9 @@ enum NotePreview {
             of: #"!\[([^\]]*)\]\(attachment://[^\)]+\)"#,
             with: "$1",
             options: .regularExpression)
-        let cleaned = withoutImages.trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.count > 80 ? String(cleaned.prefix(80)) + "…" : cleaned
+        let stripped = stripHeadingMarker(
+            withoutImages.trimmingCharacters(in: .whitespacesAndNewlines))
+        return stripped.count > 80 ? String(stripped.prefix(80)) + "…" : stripped
     }
 
     /// Relative time for the all-notes row's right edge. Today within
