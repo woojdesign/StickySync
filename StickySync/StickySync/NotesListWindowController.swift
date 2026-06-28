@@ -79,11 +79,16 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
 
         tableView.headerView = nil
         // Card-style rows (mirroring iOS list mode): each row is painted
-        // in its own sticky color, with title (15pt semibold) + a 2-line
-        // snippet (12pt). 80pt accommodates two snippet lines + meta
-        // column without crowding.
-        tableView.rowHeight = 80
+        // in its own sticky color, with title (14pt semibold) + a 2-line
+        // snippet (12pt). 76pt gives enough room for the card (with 4pt
+        // inset top/bottom + 12pt internal padding) to hold two snippet
+        // lines without wasted space when the snippet is short.
+        tableView.rowHeight = 76
         tableView.backgroundColor = .clear
+        // Inter-row spacing: an extra 4pt baked into the row height
+        // shows as vertical gap between cards because the card is inset
+        // 4pt at the top + 4pt at the bottom.
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
         tableView.style = .inset
         tableView.dataSource = self
         tableView.delegate = self
@@ -196,8 +201,15 @@ final class NotesListWindowController: NSObject, NSWindowDelegate, NSTableViewDa
 /// the iOS list mode (0.7.20). Drops the separate swatch chip; the whole
 /// row IS the swatch. Two-line snippet, per-slot text colors so dark
 /// themes (Bold Berry's Burgundy, Sunny Beach's Slate, etc.) stay legible.
-/// Designed at 80pt row height.
+/// Designed at 76pt row height with the card inset 4pt top/bottom +
+/// 16pt left/right so adjacent rows separate visually and same-color
+/// cards still read as distinct (subtle shadow makes the edge visible
+/// even when the card color matches the window bg).
 final class NoteListCellView: NSView {
+    /// The actual card — a child view inset from the cell's full bounds
+    /// so vertical/horizontal margins exist between adjacent rows. The
+    /// cell view itself is transparent; only the card is colored.
+    private let card = NSView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let snippetLabel = NSTextField(labelWithString: "")
     private let dateLabel = NSTextField(labelWithString: "")
@@ -217,18 +229,30 @@ final class NoteListCellView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        // The card lives inside an 8pt-inset region (so adjacent cards
-        // breathe). Corner radius matches the iOS WoojRadius.lg of 14.
-        layer?.cornerRadius = 14
-        layer?.cornerCurve = .continuous
+
+        // The card itself — wantsLayer for bg color + corner radius +
+        // shadow. The cell view above stays transparent so its shadow
+        // doesn't clip at the cell bounds.
+        card.wantsLayer = true
+        card.translatesAutoresizingMaskIntoConstraints = false
+        card.layer?.cornerRadius = 12
+        card.layer?.cornerCurve = .continuous
+        // Subtle shadow so even cards whose color matches the window
+        // bg (Original's Butter on cream-bg, Soft Rainbow's Mint, etc.)
+        // still read as distinct rows. Light enough that saturated
+        // cards don't feel heavy.
+        card.layer?.shadowColor = NSColor.black.cgColor
+        card.layer?.shadowOpacity = 0.10
+        card.layer?.shadowOffset = NSSize(width: 0, height: -1)
+        card.layer?.shadowRadius = 3
+        card.layer?.masksToBounds = false
 
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         titleLabel.maximumNumberOfLines = 1
 
         // Two-line snippet — embedded \n in NotePreviewText.snippet2's
-        // output becomes a real line break. byTruncatingTail handles
-        // overflow on each line independently after word wrapping.
+        // output becomes a real line break.
         snippetLabel.lineBreakMode = .byTruncatingTail
         snippetLabel.font = .systemFont(ofSize: 12)
         snippetLabel.maximumNumberOfLines = 2
@@ -277,8 +301,6 @@ final class NoteListCellView: NSView {
         hStack.spacing = 10
         hStack.translatesAutoresizingMaskIntoConstraints = false
 
-        // textStack expands to fill; meta + trash hug right. Mirrors the
-        // 0.7.18 fix that pinned the meta column to the right edge.
         metaStack.setContentHuggingPriority(.required, for: .horizontal)
         metaStack.setContentCompressionResistancePriority(.required, for: .horizontal)
         trashButton.setContentHuggingPriority(.required, for: .horizontal)
@@ -289,28 +311,32 @@ final class NoteListCellView: NSView {
         snippetLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         snippetLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        addSubview(hStack)
-        // Card inset: 6pt inset from the row's vertical extent (so cards
-        // separate visually), 14pt horizontal padding inside the card.
+        addSubview(card)
+        card.addSubview(hStack)
         NSLayoutConstraint.activate([
-            hStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            hStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            hStack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            hStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
-            metaStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 64)
+            // Card inset: 4pt top/bottom (gives 8pt total inter-row gap
+            // since each adjacent row contributes 4pt) + 14pt left/right
+            // (so cards don't bleed to the window edges).
+            card.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            // Content padding inside the card.
+            hStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            hStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            hStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
+            hStack.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -10),
+            // Reserve enough room for the longest date string ("10:16 AM"
+            // ≈ 56pt at 11pt system font) so the meta column sits at a
+            // consistent right offset across rows.
+            metaStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 72)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func updateLayer() {
-        // Re-resolve the card bg + text colors against the *current*
-        // appearance (light/dark) so a system-appearance flip after the
-        // row was last configured still draws correctly. The cgColor
-        // computation needs an active NSAppearance.currentDrawing —
-        // happens naturally because updateLayer is called from inside
-        // an AppKit redraw.
-        layer?.backgroundColor = Appearance.background(for: currentColorToken).cgColor
+        card.layer?.backgroundColor = Appearance.background(for: currentColorToken).cgColor
         applyTextColors()
     }
 
@@ -371,12 +397,10 @@ final class NoteListCellView: NSView {
     }
 
     func setSelected(_ selected: Bool) {
-        // No selection-fill on the card itself anymore; the row is
-        // already its own color. Slight rim glow on selection: kept the
-        // border subtle so it doesn't clash with the shared-note clay
-        // border that some rows already wear.
-        layer?.borderWidth = selected ? 2 : 0
-        layer?.borderColor = selected ? NSColor.woojClay.cgColor : nil
+        // Rim border on the inner card on selection. No fill flip — the
+        // card's own sticky color stays so the row's identity reads.
+        card.layer?.borderWidth = selected ? 2 : 0
+        card.layer?.borderColor = selected ? NSColor.woojClay.cgColor : nil
     }
 }
 
