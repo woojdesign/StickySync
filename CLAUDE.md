@@ -28,7 +28,7 @@ What it does (see header of `release.sh`): polished changelog → notarize → E
 ./testflight.sh 0.3.2
 ```
 
-What it does (see header of `testflight.sh`): polished changelog → archive → export IPA → `altool` upload → poll ASC for VALID → set "What to Test" via ASC API. Last shipped: **0.7.27 (175)** as `ios/v0.7.27`.
+What it does (see header of `testflight.sh`): polished changelog → archive → export IPA → `altool` upload → poll ASC for VALID → set "What to Test" via ASC API. Last shipped: **0.7.33 (187)** as `ios/v0.7.33`.
 
 **Tag manually after a successful upload** (not yet automated):
 ```sh
