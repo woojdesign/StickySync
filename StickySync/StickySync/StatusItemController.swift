@@ -50,30 +50,41 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     ///   - .syncing  → blue rotating accent (an operation is in flight)
     ///   - .error    → red exclamation
     ///   - .synced / .idle → no overlay
+    /// Last-rendered (state, isDarkMenuBar) pair — refreshStatusIcon
+    /// skips the image rebuild if nothing visually changed. Sync events
+    /// fire frequently during active CloudKit work; rebuilding the
+    /// NSImage on every same-state notification was the source of the
+    /// menu-bar-icon flicker reported as the 0.7.28 regression.
+    private var lastRenderedState: SyncMonitor.State?
+    private var lastRenderedDarkMenuBar: Bool?
+
     private func refreshStatusIcon() {
         guard let button = statusItem.button else { return }
+        let isDark = button.effectiveAppearance
+            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+
+        // Skip if neither the sync state nor the menu-bar appearance
+        // changed. Each `button.image = …` assignment triggers AppKit
+        // to invalidate + re-layout the status button → a visible
+        // flicker if the underlying NSImage isn't pixel-identical.
+        if sync.state == lastRenderedState && isDark == lastRenderedDarkMenuBar {
+            return
+        }
+        lastRenderedState = sync.state
+        lastRenderedDarkMenuBar = isDark
+
         let base = NSImage(systemSymbolName: "note.text",
                            accessibilityDescription: "StickySync")!
-        // Harmony (the common case): hand the SF Symbol directly to the
-        // status item as a *template* image. The system then tints it
-        // black-on-light-menubar / white-on-dark-menubar automatically
-        // — exactly what Sean wants ("match the other menu-bar icons").
-        // Pre-fix we always went through the composed path with
-        // isTemplate = false, so the base drew as flat black against
-        // dark menu bars too.
-        let overlay = overlaySymbol(for: sync.state)
-        if overlay == nil {
-            button.image = base
-            button.image?.isTemplate = true
-        } else {
-            // Non-harmony needs a colored overlay dot, so the composed
-            // image has to be non-template (template strips color).
-            // The base inside the composed path now resolves the menu
-            // bar's effective appearance and draws in white/black to
-            // match.
-            button.image = composedIcon(base: base, overlay: overlay)
-            button.image?.isTemplate = false
-        }
+        // Unified render path: always go through `composedIcon` so the
+        // underlying NSImage type and colors stay consistent across
+        // state transitions. Pre-fix (0.7.28) we branched between
+        // template (harmony) and composed (non-harmony) → every
+        // harmony↔syncing flip swapped image type → visible flicker
+        // during active sync (Sean's report).
+        button.image = composedIcon(base: base,
+                                    overlay: overlaySymbol(for: sync.state),
+                                    isDarkMenuBar: isDark)
+        button.image?.isTemplate = false
     }
 
     /// Returns the overlay symbol + color for the *non-harmony* states.
@@ -91,15 +102,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Compose the base symbol with a small overlay symbol in the
     /// bottom-right. The two images are rendered into a single
     /// 18×18 NSImage at NSStatusItem's natural button size.
-    private func composedIcon(base: NSImage, overlay: (String, NSColor)?) -> NSImage {
-        // Resolve the menu bar's effective appearance now (on the main
-        // thread, with NSApp's appearance live) so the base glyph draws
-        // in the right color when the off-screen NSImage drawing block
-        // runs. Inside that block, `NSColor.labelColor` resolves
-        // against a CG image context with no NSAppearance attached →
-        // falls back to *black*, which is invisible on a dark menu bar.
-        let isDarkMenuBar = NSApp.effectiveAppearance
-            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    private func composedIcon(base: NSImage, overlay: (String, NSColor)?, isDarkMenuBar: Bool) -> NSImage {
+        // Base glyph color is picked from the *caller's* resolution of
+        // the menu-bar appearance (the status button's
+        // effectiveAppearance — which tracks the menu bar correctly,
+        // unlike NSApp.effectiveAppearance which follows the app's own
+        // appearance). Inside the off-screen NSImage drawing block,
+        // `NSColor.labelColor` would otherwise resolve against a CG
+        // context with no NSAppearance attached → fall back to black,
+        // invisible on a dark menu bar.
         let baseColor: NSColor = isDarkMenuBar ? .white : .black
         let size = NSSize(width: 18, height: 18)
         return NSImage(size: size, flipped: false) { rect in
