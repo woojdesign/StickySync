@@ -321,15 +321,17 @@ final class NoteListCellView: NSView {
         addSubview(card)
         card.addSubview(hStack)
         NSLayoutConstraint.activate([
-            // Card inset: 4pt top/bottom (gives 8pt total inter-row gap
-            // since each adjacent row contributes 4pt). L/R matches the
-            // 12pt offset the New Note / Delete buttons use at the
-            // window bottom — so cards align with the window's existing
-            // chrome instead of introducing a separate margin.
+            // Card inset: 4pt top/bottom (gives 8pt total inter-row
+            // gap since each adjacent row contributes 4pt). L/R is 0
+            // because `tableView.style = .inset` is ALREADY providing
+            // the horizontal margin — anything we add here stacks on
+            // top of it. 0.7.23 added +12 here, which compounded with
+            // the .inset margin (~12pt) and pushed the cards roughly
+            // double the offset the New Note / Delete buttons use.
             card.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 0),
+            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 0),
             // Content padding inside the card.
             hStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
             hStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
