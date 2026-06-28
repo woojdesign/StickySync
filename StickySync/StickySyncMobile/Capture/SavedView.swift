@@ -57,10 +57,17 @@ struct SavedView: View {
     }
 
     private var sticky: some View {
-        VStack(alignment: .leading, spacing: WoojSpace.md) {
+        // Per-slot text color (same pattern as the index NoteCard in
+        // 0.7.8). When the user picks a dark swatch from the SavedView
+        // dock (Bold Berry's Burgundy, Sunny Beach's Slate, etc.) the
+        // body text + footer follow the palette's white-ink pair instead
+        // of staying hardcoded dark. The check brand-color stays clay
+        // since it reads as identity, not text.
+        let textColor = Appearance.text(vm.savedColorToken)
+        return VStack(alignment: .leading, spacing: WoojSpace.md) {
             Text(vm.savedText)
                 .woojStyle(WoojType.reading)
-                .foregroundColor(WoojColor.reading)
+                .foregroundColor(textColor)
                 .lineSpacing(WoojType.reading.lineSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentTransition(.opacity)
@@ -72,7 +79,7 @@ struct SavedView: View {
                     .foregroundColor(WoojColor.clay)
                 Text(footer)
                     .woojStyle(WoojType.mono)
-                    .foregroundColor(WoojColor.muted)
+                    .foregroundColor(textColor.opacity(0.6))
             }
         }
         .padding(WoojSpace.lg)

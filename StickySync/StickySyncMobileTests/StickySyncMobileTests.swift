@@ -134,4 +134,63 @@ final class NoteCardSnapshotTests: XCTestCase {
                             store: EmptyStubStore())
         assertCard(wrap(card))
     }
+
+    /// Regression test for the 0.7.10 "orphan thumb" bug: deleting the
+    /// `![](attachment://UUID)` text from a sticky orphans the underlying
+    /// CDAttachment (it isn't soft-deleted, just unreferenced). The card
+    /// must not show an orphan as a thumb — only attachments whose UUID
+    /// is still mentioned in note.content count as covers.
+    @MainActor
+    func testOrphanAttachment_NotShownAsThumb() {
+        let card = NoteCard(
+            note: Note(content: "Used to have an image; now just text.",
+                       colorToken: "1"),
+            isShared: false,
+            store: OrphanAttachmentStubStore())
+        assertCard(wrap(card))
+    }
+}
+
+/// Returns one non-deleted attachment for any note, with image bytes.
+/// Mimics the post-bug state: the editor deleted the markdown reference
+/// but the CDAttachment row survived as an orphan.
+@MainActor
+final class OrphanAttachmentStubStore: NoteStore {
+    var onChange: (() -> Void)?
+
+    func allNotes() -> [Note] { [] }
+    func note(id: UUID) -> Note? { nil }
+    func layout(for id: UUID) -> NoteLayout? { nil }
+    func add(_ note: Note) {}
+    func update(_ note: Note) {}
+    func setLayout(_ layout: NoteLayout) {}
+    func softDelete(id: UUID) {}
+
+    func attachments(for noteID: UUID) -> [Attachment] {
+        // Single non-deleted attachment — but the test note's content
+        // doesn't reference this UUID, so it should be ignored.
+        [Attachment(noteID: noteID, mimeType: "image/png")]
+    }
+    func attachment(id: UUID) -> Attachment? { nil }
+    func addImageAttachment(for noteID: UUID, imageData: Data, mimeType: String,
+                            originalFilename: String?, altText: String?) -> Attachment? { nil }
+    func update(_ attachment: Attachment) {}
+    func softDeleteAttachment(id: UUID) {}
+    // Return a 1×1 PNG so if the gate fails, the thumb path actually
+    // produces a UIImage and the snapshot regression is visible.
+    func imageData(for attachmentID: UUID) -> Data? { Self.onePixelPNG }
+    func thumbnailData(for attachmentID: UUID) -> Data? { nil }
+
+    /// Smallest valid PNG bytes — a 1×1 black pixel.
+    static let onePixelPNG: Data = Data([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+        0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41,
+        0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+        0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+        0x42, 0x60, 0x82
+    ])
 }

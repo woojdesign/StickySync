@@ -361,11 +361,21 @@ struct NoteCard: View {
         // the list. Keying on `note.id` alone never re-runs, so the card
         // would stay blank until the app relaunched.
         .task(id: "\(note.id)|\(note.modifiedAt.timeIntervalSince1970)|\(note.content.count)") {
-            // Picks the first non-deleted attachment as the cover. Later we
-            // could honor an explicit "cover" flag, but first-paste-wins is
-            // the right default for an inline-paste editor.
+            // Picks the first non-deleted attachment that's *still
+            // referenced* by note.content as a cover. The reference check
+            // matters because deleting the `![](attachment://UUID)` text
+            // from the editor doesn't soft-delete the underlying
+            // CDAttachment — it just orphans it. Without the gate, the
+            // card kept showing a thumb for a sticky whose image was
+            // deleted ("snapshot retained after delete" bug).
             let attachments = store.attachments(for: note.id)
-            guard let first = attachments.first(where: { !$0.isDeleted }),
+            let referenced = attachments.first { att in
+                guard !att.isDeleted else { return false }
+                return note.content.range(
+                    of: "attachment://\(att.id.uuidString)",
+                    options: .caseInsensitive) != nil
+            }
+            guard let first = referenced,
                   let data = store.thumbnailData(for: first.id) ?? store.imageData(for: first.id),
                   let img = UIImage(data: data) else {
                 if thumb != nil { thumb = nil }
