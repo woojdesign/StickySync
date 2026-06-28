@@ -300,6 +300,13 @@ final class NoteListCellView: NSView {
         hStack.alignment = .top
         hStack.spacing = 10
         hStack.translatesAutoresizingMaskIntoConstraints = false
+        // .fill forces the children to actually use the stack's
+        // available horizontal width — the textStack expands to absorb
+        // the slack, so the metaStack always lands at the right edge.
+        // Default `.gravityAreas` distribution would otherwise let the
+        // textStack hug tight to a short title (the "dabi" row's
+        // "yesterday" date snapping right next to "dabi" in 0.7.22).
+        hStack.distribution = .fill
 
         metaStack.setContentHuggingPriority(.required, for: .horizontal)
         metaStack.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -315,12 +322,14 @@ final class NoteListCellView: NSView {
         card.addSubview(hStack)
         NSLayoutConstraint.activate([
             // Card inset: 4pt top/bottom (gives 8pt total inter-row gap
-            // since each adjacent row contributes 4pt) + 14pt left/right
-            // (so cards don't bleed to the window edges).
+            // since each adjacent row contributes 4pt). L/R matches the
+            // 12pt offset the New Note / Delete buttons use at the
+            // window bottom — so cards align with the window's existing
+            // chrome instead of introducing a separate margin.
             card.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             // Content padding inside the card.
             hStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
             hStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
