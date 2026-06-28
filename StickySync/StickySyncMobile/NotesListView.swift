@@ -359,6 +359,15 @@ struct NoteCard: View {
     /// card body doesn't block on Core Data + thumbnail decode during
     /// each scroll re-layout.
     @State private var thumb: UIImage?
+    /// Which attachment is currently rendered into `thumb`. Used to
+    /// skip the reassignment when a task re-fire (dataTick bump from
+    /// any CloudKit import — fires every few seconds) is just
+    /// re-resolving the same attachment. Without this, every
+    /// background CloudKit event reassigned `thumb` with a freshly-
+    /// decoded UIImage → SwiftUI saw `@State` change → re-rendered
+    /// the Image → brief layout shift → visible flicker on
+    /// "all notes" cards. (The 0.7.15 "all notes flickers" report.)
+    @State private var thumbAttachmentID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WoojSpace.md) {
@@ -421,9 +430,18 @@ struct NoteCard: View {
                   let data = store.thumbnailData(for: first.id) ?? store.imageData(for: first.id),
                   let img = UIImage(data: data) else {
                 if thumb != nil { thumb = nil }
+                thumbAttachmentID = nil
                 return
             }
-            thumb = img
+            // Only reassign if the resolved attachment is actually
+            // different from what we already have rendered. Equivalent
+            // task re-fires (same attachment, fresh dataTick) would
+            // otherwise build a new UIImage each time and cause SwiftUI
+            // to redraw → visible flicker.
+            if thumbAttachmentID != first.id {
+                thumb = img
+                thumbAttachmentID = first.id
+            }
         }
         .frame(minHeight: 120, alignment: .topLeading)
         .padding(WoojSpace.md)
