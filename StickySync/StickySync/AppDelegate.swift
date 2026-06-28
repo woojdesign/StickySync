@@ -63,6 +63,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.reconcileWindows() }
         }
 
+        // Also reconcile on app activate (foreground). Tier 1 report
+        // 2026-06-28: an iOS-captured sticky only appeared on Mac
+        // after a relaunch — LWW timestamps confirmed the import
+        // landed correctly when it finally landed, so the bug wasn't
+        // the gate; it was that NSPersistentStoreRemoteChange didn't
+        // fire (or didn't fire promptly) for the new record while the
+        // app was running. NSPersistentCloudKitContainer's import IS
+        // documented as occasionally lazy. A foreground refresh is
+        // the standard mitigation: the user coming back is a natural
+        // signal that they want a fresh read, so refetch
+        // unconditionally. allNotes() already does a fresh Core Data
+        // fetch each call, so this surfaces any record the import
+        // landed silently in the background.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppActivated),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil)
+
         // Start the local AI-access HTTP server if the user enabled it
         // last session. Failure is non-fatal (e.g. port conflict) — we
         // log and surface in the UI via the "Enable AI access" toggle
@@ -133,6 +152,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opens windows for newly-appeared (non-hidden) notes, live-updates open
     /// ones, and closes windows for notes deleted elsewhere.
+    @objc private func handleAppActivated() {
+        // Cheap (one Core Data fetch + diff against `controllers`); fine
+        // to run on every activation. If nothing changed, reconcile is
+        // a no-op.
+        reconcileWindows()
+    }
+
     private func reconcileWindows() {
         let current = store.allNotes()
         let currentIDs = Set(current.map { $0.id })
