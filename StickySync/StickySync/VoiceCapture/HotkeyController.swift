@@ -5,10 +5,11 @@
 // accessibility permission (which is only needed if we wanted to
 // *inject* keystrokes; we don't, we just listen).
 //
-// V1 behavior: hold-to-record. KEY_DOWN fires `started`,
-// KEY_UP fires `stopped`. Double-tap-to-latch is a planned V2
-// follow-up (a more nuanced state machine; getting the hold flow
-// shipping first to validate the audio + Whisper layers).
+// Gesture: **tap or hold**. A short press (< 300ms before release)
+// latches recording on — release doesn't stop it. A long press
+// (>= 300ms) is hold-to-talk — release stops. Tapping again while
+// latched stops. Both gestures coexist; the user picks per
+// utterance whichever fits.
 
 import AppKit
 import Carbon.HIToolbox
@@ -24,9 +25,13 @@ final class HotkeyController {
     /// Returns true if the hotkey is currently registered.
     private(set) var isRegistered = false
 
-    /// Default chord: ⌃⌥V. Three modifiers + V — unlikely to collide
-    /// with any system or app shortcut. Configurable later.
-    private static let defaultModifiers: UInt32 = UInt32(controlKey | optionKey)
+    /// Default chord: **⌥V** (option + V). Two keys, mnemonic for
+    /// "voice," reachable with one hand. Cut from the original
+    /// ⌃⌥V — Sean called the three-key chord "awkward as hell to
+    /// toggle." Conflict: ⌥V types ✓ when no app captures it; the
+    /// hotkey registration intercepts before insertion so this is a
+    /// non-issue while StickySync is running. Configurable later.
+    private static let defaultModifiers: UInt32 = UInt32(optionKey)
     private static let defaultKeyCode: UInt32 = UInt32(kVK_ANSI_V)
 
     /// Four-char-code signature so the OS can route hotkey events
@@ -41,6 +46,57 @@ final class HotkeyController {
 
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
+
+    /// State machine for tap-or-hold gesture.
+    private enum State {
+        case idle
+        case recording(downAt: Date)
+        case latched
+        case stoppingLatched
+    }
+    private var state: State = .idle
+    /// Press shorter than this is a "tap" (latch); longer is a "hold"
+    /// (release stops). Carbon delivers KEY_DOWN and KEY_UP with their
+    /// system timestamps; we compute the duration off our own Dates
+    /// since we don't need millisecond accuracy.
+    private static let tapThreshold: TimeInterval = 0.3
+
+    /// Called from the Carbon event handler on KEY_DOWN.
+    func handleRawKeyDown() {
+        switch state {
+        case .idle:
+            state = .recording(downAt: Date())
+            onEvent?(.started)
+        case .latched:
+            // Tap-to-stop while latched. The recording is ending here;
+            // the matching KEY_UP just returns us to idle without
+            // starting a new session.
+            state = .stoppingLatched
+            onEvent?(.stopped)
+        case .recording, .stoppingLatched:
+            break  // Carbon shouldn't deliver back-to-back DOWNs
+        }
+    }
+
+    /// Called from the Carbon event handler on KEY_UP.
+    func handleRawKeyUp() {
+        switch state {
+        case .recording(let downAt):
+            if Date().timeIntervalSince(downAt) < Self.tapThreshold {
+                // Tap → latch on; recording continues. No event to the
+                // outer pipeline; the session is already running.
+                state = .latched
+            } else {
+                // Hold-release → stop.
+                state = .idle
+                onEvent?(.stopped)
+            }
+        case .stoppingLatched:
+            state = .idle
+        case .idle, .latched:
+            break
+        }
+    }
 
     func register() {
         guard !isRegistered else { return }
@@ -87,13 +143,13 @@ final class HotkeyController {
                 let controller = Unmanaged<HotkeyController>
                     .fromOpaque(userData).takeUnretainedValue()
                 let kind = GetEventKind(eventRef)
-                let event: Event
-                switch Int(kind) {
-                case kEventHotKeyPressed:  event = .started
-                case kEventHotKeyReleased: event = .stopped
-                default:                   return noErr
+                DispatchQueue.main.async {
+                    switch Int(kind) {
+                    case kEventHotKeyPressed:  controller.handleRawKeyDown()
+                    case kEventHotKeyReleased: controller.handleRawKeyUp()
+                    default: break
+                    }
                 }
-                DispatchQueue.main.async { controller.onEvent?(event) }
                 return noErr
             },
             eventTypes.count,
