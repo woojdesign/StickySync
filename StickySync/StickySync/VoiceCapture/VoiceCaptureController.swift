@@ -31,8 +31,23 @@ final class VoiceCaptureController {
     private let store: NoteStore
 
     var resolveKeyStickyID: (() -> UUID?)?
+    /// Returns the id of an existing sticky window we can bring forward
+    /// when no sticky is currently key — set by AppDelegate to pick the
+    /// frontmost-most-recent of the open controllers. Lets a press of
+    /// the hotkey "wake" the app's stickies rather than always create
+    /// a fresh note (Sean's 0.7.38 report: "when stickies are not up
+    /// it should bring up a sticky note to the foreground").
+    var resolveStickyToFocus: (() -> UUID?)?
     var openNoteWindow: ((Note, _ focus: Bool) -> Void)?
     var appendToOpenNote: ((UUID, String) -> Void)?
+    /// Bring the given sticky window forward and make it key (used by
+    /// the resolveStickyToFocus path). Set by AppDelegate.
+    var bringStickyForward: ((UUID) -> Void)?
+    /// Returns the NSWindow for a given sticky id, used to anchor the
+    /// recording indicator. Set by AppDelegate.
+    var windowForSticky: ((UUID) -> NSWindow?)?
+
+    private let indicator = RecordingIndicator()
 
     /// Active session state. nil between captures.
     private var activeNoteID: UUID?
@@ -70,13 +85,30 @@ final class VoiceCaptureController {
             let separator = "\n"
             let targetID: UUID
             if let keyID = resolveKeyStickyID?() {
+                // (1) A sticky is already key — append into it.
                 targetID = keyID
                 appendToOpenNote?(keyID, separator)
+            } else if let existingID = resolveStickyToFocus?() {
+                // (2) No sticky key, but existing sticky windows are
+                // around (app backgrounded, or focus is on a non-
+                // sticky window). Bring the most-recent one forward
+                // and append — don't fabricate a new sticky.
+                targetID = existingID
+                bringStickyForward?(existingID)
+                appendToOpenNote?(existingID, separator)
             } else {
+                // (3) No stickies at all — create a fresh one.
                 let note = Note(content: "", colorToken: "1")
                 store.add(note)
                 openNoteWindow?(note, true)
                 targetID = note.id
+            }
+            // Surface the indicator anchored to whichever sticky we
+            // ended up with so the user sees "I'm listening" even when
+            // they're not looking at the editor (cursor elsewhere,
+            // window in a different Space, etc.).
+            if let anchorWindow = windowForSticky?(targetID) {
+                indicator.show(over: anchorWindow)
             }
             activeNoteID = targetID
             committedPartialLength = 0
@@ -126,6 +158,7 @@ final class VoiceCaptureController {
     private func handleStopped() {
         guard let id = activeNoteID else { return }
         recorder.stop()
+        indicator.hide()
         let final = transcriber.end()
         partialSubscription = nil
         // Final flush: write the remainder if SFSpeechRecognizer's
