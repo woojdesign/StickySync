@@ -163,8 +163,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // research is unanimous that no respected app does this.
         if let title = syncTitle {
             let syncItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            syncItem.isEnabled = false
             syncItem.image = syncImage
+            // Phase 2.d (0.7.34): when the state has a recoverable cause,
+            // clicking the sync line opens System Settings at the right
+            // pane. The error text already tells the user what to do
+            // ("Sign in to iCloud…", "Offline…"); making it actionable
+            // closes the loop without forcing them to leave the menu
+            // bar, open Settings manually, and remember which pane.
+            if let deepLink = syncDeepLinkURL(for: sync.state) {
+                syncItem.action = #selector(openSyncDeepLink(_:))
+                syncItem.target = self
+                syncItem.representedObject = deepLink
+            } else {
+                syncItem.isEnabled = false
+            }
             menu.addItem(syncItem)
         }
 
@@ -279,6 +291,27 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func reportSyncIssue() {
         SyncReportComposer.shared.present(currentSyncState: syncStateString())
+    }
+
+    @objc private func openSyncDeepLink(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// System Settings target for each non-harmony state — opens the
+    /// pane the user most likely needs to fix the cause. Returns nil
+    /// for states without a clear target (`.syncing`, `.error(.unknown)`),
+    /// in which case the sync line stays informational and the user
+    /// can fall back to the existing "Report sync issue…" item.
+    private func syncDeepLinkURL(for state: SyncMonitor.State) -> URL? {
+        switch state {
+        case .error(.account), .error(.quota):
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane")
+        case .offline, .error(.network):
+            return URL(string: "x-apple.systempreferences:com.apple.preference.network")
+        case .error(.unknown), .syncing, .harmony:
+            return nil
+        }
     }
 
     /// Stringify the SyncMonitor state for the report header without

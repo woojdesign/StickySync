@@ -192,19 +192,28 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             // parent note. When the note imported first and we set the
             // editor's storage at window-open time, attachmentLoader
             // returned nil for the not-yet-imported CDAttachment → the
-            // FFFC placeholder sat there empty. Subsequent CloudKit
-            // imports (including the one carrying the CDAttachment) fire
-            // refresh(from:) but content is unchanged, so applyRemote-
-            // Content wasn't called and the inline image never re-
-            // hydrated. Re-running substituteAttachmentReferences here
-            // picks up newly-available attachments — safe because it's
-            // idempotent (walks the source, ensures FFFC + attachment
-            // attributes match current image availability). Only when
-            // not editing, so a re-resolve mid-keystroke can't disturb
-            // the cursor / selection.
+            // FFFC placeholder's NSTextAttachment.image stayed nil and
+            // the inline image silently never appeared.
+            //
+            // 0.7.34 audit: the original fix called
+            // `substituteAttachmentReferences()` here, but that walks
+            // `backing.string` for the raw `![](attachment://UUID)`
+            // pattern — and by post-window-open time the backing
+            // already has FFFC, not raw markdown. The regex matched
+            // nothing → the function was a no-op. The dabi case
+            // probably resolved itself for Sean via app relaunch (the
+            // always-on escape hatch) and the "fix" never executed
+            // useful work.
+            //
+            // The right call is `refreshAttachmentImages()`: walks
+            // FFFCs tagged with `.markdownAttachmentID`, checks each
+            // attachment's `.image == nil`, and re-loads via
+            // `attachmentLoader` when an image is now available. Only
+            // when not editing so a mid-keystroke reload can't disturb
+            // cursor / selection.
             if updated.content.range(of: "attachment://", options: .caseInsensitive) != nil
                 && !isEditing {
-                noteView.markdownStorage.substituteAttachmentReferences()
+                noteView.markdownStorage.refreshAttachmentImages()
             }
         }
     }

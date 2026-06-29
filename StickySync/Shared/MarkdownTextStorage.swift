@@ -161,6 +161,42 @@ public final class MarkdownTextStorage: NSTextStorage {
         }
     }
 
+    /// Walk every FFFC tagged with `.markdownAttachmentID` and, if its
+    /// `NSTextAttachment.image` is currently nil, try to re-load via
+    /// `attachmentLoader`. Set the image + scaled bounds when one is
+    /// returned; leave the placeholder bounds alone when the attachment
+    /// still hasn't arrived.
+    ///
+    /// This is what `substituteAttachmentReferences()` was supposed to
+    /// do for the late-attachment-arrival case (0.7.26 dabi fix), but
+    /// can't — substitute walks `backing.string` for raw
+    /// `![](attachment://UUID)` text, which by post-paste / post-load
+    /// time is gone (each ref already collapsed to a single FFFC).
+    /// Audit (0.7.34): the 0.7.26 call site was a no-op against the
+    /// post-substitute backing.
+    public func refreshAttachmentImages() {
+        let full = NSRange(location: 0, length: backing.length)
+        var workQueue: [(range: NSRange, id: UUID, source: String)] = []
+        backing.enumerateAttribute(.markdownAttachmentID, in: full, options: []) { value, range, _ in
+            guard let attachmentID = value as? UUID,
+                  let existing = self.backing.attribute(.attachment, at: range.location, effectiveRange: nil) as? NSTextAttachment,
+                  existing.image == nil else { return }
+            let source = (self.backing.attribute(.markdownAttachmentSource, at: range.location, effectiveRange: nil) as? String) ?? ""
+            workQueue.append((range, attachmentID, source))
+        }
+        guard !workQueue.isEmpty, let loader = attachmentLoader else { return }
+        beginEditing()
+        for item in workQueue {
+            guard let image = loader(item.id) else { continue }
+            applyAttachmentAttributes(in: item.range,
+                                      source: item.source,
+                                      attachmentID: item.id,
+                                      image: image)
+            edited(.editedAttributes, range: item.range, changeInLength: 0)
+        }
+        endEditing()
+    }
+
     /// Insert a fresh attachment placeholder at `location` — used by the
     /// paste handler after it has uploaded the image bytes to NotesKit.
     /// The caller has the UUID and the image already; we just need to

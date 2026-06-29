@@ -160,15 +160,19 @@ struct NotesListView: View {
                     // "Synced" was overstating what we can actually verify.
                     if sync.state != .harmony {
                         Text("·")
-                        // Tap the non-harmony line → open the Tier 1 report
-                        // composer. This is the always-on path; future
-                        // Phase 2.d will add per-state deep-links to System
-                        // Settings (network → "go online", account → "sign
-                        // in", quota → "manage storage"). Reporting is the
-                        // fallback when none of those fix the underlying
-                        // issue.
+                        // Tap is now state-aware (Phase 2.d, 0.7.34):
+                        //   account/quota/offline/network → open Settings
+                        //     (the user's most likely next step — Apple
+                        //     deprecated `App-prefs:` deep links for third
+                        //     parties on iOS, so openSettingsURLString is
+                        //     the only reliable target. Lands on the
+                        //     StickySync entry; user navigates to iCloud /
+                        //     Wi-Fi from there.)
+                        //   unknown/syncing → fall back to the Tier 1
+                        //     report composer (the diagnostic for "I don't
+                        //     know what's wrong" states).
                         syncStatus
-                            .onTapGesture { reportingSync = true }
+                            .onTapGesture { handleSyncTap() }
                     }
                 }
                 .font(.system(size: 13))
@@ -303,6 +307,19 @@ struct NotesListView: View {
                     Label("Delete", systemImage: "trash")
                 }
             }
+    }
+
+    /// Route a sync-status tap to the most useful next action for the
+    /// current state. See the call site for the policy.
+    private func handleSyncTap() {
+        switch sync.state {
+        case .error(.account), .error(.quota), .offline, .error(.network):
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        case .error(.unknown), .syncing, .harmony:
+            reportingSync = true
+        }
     }
 
     /// Stringify the SyncMonitor state for the report header. Stable
