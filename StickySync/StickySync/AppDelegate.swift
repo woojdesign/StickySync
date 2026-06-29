@@ -89,29 +89,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // visible; phases 2/3 swap in AVAudioEngine + WhisperKit.
         let voice = VoiceCaptureController(store: store)
         voice.resolveKeyStickyID = { [weak self] in self?.keyNoteID() }
-        voice.resolveStickyToFocus = { [weak self] in
-            // Pick whichever open sticky's note is most recently
-            // modified. The user's mental "this is my current sticky"
-            // matches the freshest one — same heuristic the all-notes
-            // list uses for top-of-list ordering.
-            guard let self else { return nil }
-            return self.controllers.values
-                .max(by: { $0.note.modifiedAt < $1.note.modifiedAt })?
-                .note.id
-        }
         voice.openNoteWindow = { [weak self] note, focus in
             self?.openWindow(for: note, focus: focus)
+            // openWindow brings the window forward; also activate the
+            // app so the user lands in the sticky regardless of what
+            // they had focused before. Matches the user's expectation
+            // when capture is triggered from outside the app.
+            if focus { NSApp.activate(ignoringOtherApps: true) }
         }
         voice.appendToOpenNote = { [weak self] id, text in
             self?.controllers[id]?.appendText(text)
-        }
-        voice.bringStickyForward = { [weak self] id in
-            // Make sure we're the active app *and* the chosen sticky
-            // is key — appendText brings the window to front but does
-            // not activate the app itself. NSApp.activate is the
-            // standard nudge.
-            NSApp.activate(ignoringOtherApps: true)
-            self?.controllers[id]?.window.makeKeyAndOrderFront(nil)
         }
         voice.windowForSticky = { [weak self] id in
             self?.controllers[id]?.window

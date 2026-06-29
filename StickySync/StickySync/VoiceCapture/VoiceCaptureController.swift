@@ -31,18 +31,8 @@ final class VoiceCaptureController {
     private let store: NoteStore
 
     var resolveKeyStickyID: (() -> UUID?)?
-    /// Returns the id of an existing sticky window we can bring forward
-    /// when no sticky is currently key — set by AppDelegate to pick the
-    /// frontmost-most-recent of the open controllers. Lets a press of
-    /// the hotkey "wake" the app's stickies rather than always create
-    /// a fresh note (Sean's 0.7.38 report: "when stickies are not up
-    /// it should bring up a sticky note to the foreground").
-    var resolveStickyToFocus: (() -> UUID?)?
     var openNoteWindow: ((Note, _ focus: Bool) -> Void)?
     var appendToOpenNote: ((UUID, String) -> Void)?
-    /// Bring the given sticky window forward and make it key (used by
-    /// the resolveStickyToFocus path). Set by AppDelegate.
-    var bringStickyForward: ((UUID) -> Void)?
     /// Returns the NSWindow for a given sticky id, used to anchor the
     /// recording indicator. Set by AppDelegate.
     var windowForSticky: ((UUID) -> NSWindow?)?
@@ -82,22 +72,21 @@ final class VoiceCaptureController {
             // any audio starts. New stickies start with empty content,
             // so the anchor is 0; existing stickies anchor at end-of-
             // current-text + a leading newline.
+            // Targeting policy: only append into the key sticky.
+            // Anything else (no sticky key, app backgrounded, sticky
+            // window minimized) → fresh sticky. Sean's 0.7.39 follow-
+            // up: "if we're not in the stickies we should default to
+            // a new note rather than the last note." Pre-fix the
+            // branch tried to bring the most-recently-modified open
+            // sticky forward, which surprised the user — they
+            // expected a fresh capture when they weren't actively in
+            // a sticky.
             let separator = "\n"
             let targetID: UUID
             if let keyID = resolveKeyStickyID?() {
-                // (1) A sticky is already key — append into it.
                 targetID = keyID
                 appendToOpenNote?(keyID, separator)
-            } else if let existingID = resolveStickyToFocus?() {
-                // (2) No sticky key, but existing sticky windows are
-                // around (app backgrounded, or focus is on a non-
-                // sticky window). Bring the most-recent one forward
-                // and append — don't fabricate a new sticky.
-                targetID = existingID
-                bringStickyForward?(existingID)
-                appendToOpenNote?(existingID, separator)
             } else {
-                // (3) No stickies at all — create a fresh one.
                 let note = Note(content: "", colorToken: "1")
                 store.add(note)
                 openNoteWindow?(note, true)
