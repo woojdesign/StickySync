@@ -304,6 +304,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// in which case the sync line stays informational and the user
     /// can fall back to the existing "Report sync issue…" item.
     private func syncDeepLinkURL(for state: SyncMonitor.State) -> URL? {
+        Self.syncDeepLinkURL(for: state)
+    }
+
+    /// Pure routing — exposed `internal` so the test target can pin
+    /// the state→pane mapping without standing up a status item.
+    static func syncDeepLinkURL(for state: SyncMonitor.State) -> URL? {
         switch state {
         case .error(.account), .error(.quota):
             return URL(string: "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane")

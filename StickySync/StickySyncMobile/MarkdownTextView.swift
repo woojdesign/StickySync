@@ -109,6 +109,17 @@ struct MarkdownTextView: UIViewRepresentable {
             let full = NSRange(location: 0, length: storage.length)
             storage.replaceCharacters(in: full, with: text)
             storage.substituteAttachmentReferences()
+        } else if text.range(of: "attachment://", options: .caseInsensitive) != nil {
+            // No text change, but the parent re-rendered — most likely
+            // because `model.dataTick` bumped, which fires on every
+            // CloudKit import (including attachments arriving for this
+            // note's existing references). Walk FFFCs and re-load any
+            // whose NSTextAttachment.image is still nil — same fix the
+            // Mac side got in 0.7.34. Without this the editor showed an
+            // empty inline placeholder until the user closed and
+            // re-opened the note. Idempotent: skips FFFCs whose image
+            // is already set so it's safe to run on every update.
+            storage.refreshAttachmentImages()
         }
 
         // Pick up font / color changes (color-token swatch tap, font menu).

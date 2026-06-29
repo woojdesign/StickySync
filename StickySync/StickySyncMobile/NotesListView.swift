@@ -312,13 +312,25 @@ struct NotesListView: View {
     /// Route a sync-status tap to the most useful next action for the
     /// current state. See the call site for the policy.
     private func handleSyncTap() {
-        switch sync.state {
-        case .error(.account), .error(.quota), .offline, .error(.network):
+        switch Self.syncTapAction(for: sync.state) {
+        case .openSettings:
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)
             }
-        case .error(.unknown), .syncing, .harmony:
+        case .openReport:
             reportingSync = true
+        }
+    }
+
+    /// Pure routing — exposed `internal` so the test target can pin
+    /// the state→action mapping without standing up SwiftUI / UIKit.
+    enum SyncTapAction: Equatable { case openSettings, openReport }
+    static func syncTapAction(for state: SyncMonitor.State) -> SyncTapAction {
+        switch state {
+        case .error(.account), .error(.quota), .offline, .error(.network):
+            return .openSettings
+        case .error(.unknown), .syncing, .harmony:
+            return .openReport
         }
     }
 
