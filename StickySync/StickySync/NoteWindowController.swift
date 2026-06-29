@@ -137,19 +137,30 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     /// when the partial is still the last thing in the sticky, so we
     /// never overwrite something the user typed after.
     func replaceTrailingMatch(_ expected: String, with replacement: String) {
-        guard !expected.isEmpty else { return }
         let storage = noteView.markdownStorage
-        let full = storage.string as NSString
-        let expectedNS = expected as NSString
-        guard full.length >= expectedNS.length else { return }
-        guard full.hasSuffix(expected) else { return }
-        let range = NSRange(location: full.length - expectedNS.length,
-                            length: expectedNS.length)
+        guard let range = Self.trailingReplacementRange(
+                in: storage.string, expected: expected) else { return }
         storage.replaceCharacters(in: range, with: replacement)
         noteView.textView.setSelectedRange(
             NSRange(location: storage.length, length: 0))
         NotificationCenter.default.post(name: NSText.didChangeNotification,
                                         object: noteView.textView)
+    }
+
+    /// Pure helper for `replaceTrailingMatch`: returns the NSRange to
+    /// replace, or nil if the swap should be skipped (expected is empty,
+    /// content shorter than expected, or content doesn't end with
+    /// expected). Exposed `internal` so tests can pin the decision
+    /// logic without standing up a window + text view.
+    static func trailingReplacementRange(in content: String,
+                                         expected: String) -> NSRange? {
+        guard !expected.isEmpty else { return nil }
+        let full = content as NSString
+        let expectedNS = expected as NSString
+        guard full.length >= expectedNS.length else { return nil }
+        guard full.hasSuffix(expected) else { return nil }
+        return NSRange(location: full.length - expectedNS.length,
+                       length: expectedNS.length)
     }
 
     /// Append text at the very end of the sticky's content, then bring
