@@ -4,6 +4,13 @@ Project documentation, research, and planning notes. Live, internal-facing.
 User-facing release notes live in `/release-notes/` at the repo root (tied to
 the release pipeline; intentionally separate).
 
+**These docs are load-bearing.** `CLAUDE.md` (repo root) references the rules
+in this directory directly — `docs/testing.md` is cited as the testing
+discipline, and the "Process discipline" section there pulls from these
+files. Treat docs like code: a drift between a doc and what we actually do
+is a real bug, not a stale comment. Update the doc in the same commit as
+the practice change.
+
 ## Layout
 
 - [`testing.md`](testing.md) — testing discipline: rules + cadence. The "every

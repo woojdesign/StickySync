@@ -10,6 +10,37 @@ Auto-loaded by Claude Code in every session. Keep terse; link to scripts/code fo
 - **wooj-tokens** (`~/dev/wooj-tokens`, tag 0.2.0) — design tokens, **consumed only**. Edit via its `tokens.json` upstream, never in this repo.
 - CloudKit container `iCloud.design.wooj.StickySync` shared by both apps.
 
+## Process discipline (load-bearing — read this section)
+
+These rules are how we ship in this repo. **Treat docs like code:** the
+rules below are referenced from `docs/` because LLM-assisted coding makes
+docs the source-of-truth on how we work. A drift between docs and code is
+a real bug.
+
+- **Every bug gets a failing test before it gets a fix.** Full rules:
+  [`docs/testing.md`](docs/testing.md). The most-violated rule is #6 —
+  read the exact failure message before guessing.
+- **Tests ship in the same commit as the feature, not after.** If a code
+  path is hard to test (window, audio engine, network), extract a pure
+  helper for the decision logic and pin that. Pattern:
+  `NoteWindowController.trailingReplacementRange` + `TrailingReplacementTests`
+  (0.8.1) — turned a hard-to-test instance method into a pure static + a
+  thin wrapper. Six tests in 80 lines.
+- **Visually verify appearance before saying shipped.** Build-clean +
+  rule-7-alive is necessary but not sufficient for UI changes. Take a
+  screencap of the affected surface, open Read on the PNG, eyeball it
+  before commit. When the UI genuinely can't be driven from CLI (paste,
+  hover, modal, floating indicator that needs live state) — say so
+  explicitly in the ship message and don't claim done. Sean's attention
+  is the scarce resource.
+- **MCP server lives in the running production app.** If `mcp__stickysync__*`
+  tools return "Unable to connect," recover with
+  `open /Applications/StickySync.app` (production app, not the Debug
+  build) and retry. Don't ask Sean to reopen.
+- **Docs live under `docs/`** (see `docs/README.md` for the map). Release
+  notes live under `release-notes/` (pipeline artifact; intentionally
+  separate).
+
 ## Release flows
 
 Two separate flows. They share `scripts/release_notes.sh` for changelog generation but otherwise don't overlap.
