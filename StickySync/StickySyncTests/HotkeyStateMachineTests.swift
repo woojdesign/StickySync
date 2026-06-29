@@ -1,86 +1,78 @@
 // HotkeyStateMachineTests.swift
 //
-// Pins the tap/hold/latch state machine inside HotkeyController. The
+// Pins the tap-to-toggle state machine inside HotkeyController. The
 // Carbon registration layer isn't exercised here (it's a system call
 // and unit-testing it would be pointless); these tests target the
 // pure state transitions by invoking handleRawKeyDown / handleRawKeyUp
 // directly.
+//
+// Gesture model (0.8.5): every press toggles. KEY_UP is silent —
+// no timing windows, no tap-vs-hold distinction. Sean's 0.8.4
+// report: the prior tap-or-hold hybrid model required holding a
+// two-key chord for any utterance longer than 300ms (uncomfortable)
+// or precisely-timed taps (fiddly). Pure toggle removes both.
 
 import XCTest
 @testable import StickySync
 
 final class HotkeyStateMachineTests: XCTestCase {
 
-    /// Hold the hotkey for longer than tapThreshold then release → one
-    /// started + one stopped, no extras.
-    func testHold_FiresStartedThenStoppedOnRelease() {
+    /// First press starts; second press stops. The most basic contract.
+    func testPress_TogglesRecording() {
         let h = HotkeyController()
         var events: [HotkeyController.Event] = []
         h.onEvent = { events.append($0) }
 
         h.handleRawKeyDown()
-        Thread.sleep(forTimeInterval: 0.35)   // exceed 300ms tap threshold
-        h.handleRawKeyUp()
+        XCTAssertEqual(events, [.started])
 
+        h.handleRawKeyDown()
         XCTAssertEqual(events, [.started, .stopped])
     }
 
-    /// Quick tap → latches recording on. Release does NOT fire stopped.
-    /// Second tap (next press) stops.
-    func testTap_LatchesOn_NextPressStops() {
+    /// KEY_UP events are silent — by design. A long press (user
+    /// holding the chord while talking) must NOT accidentally end
+    /// the session on release.
+    func testKeyUp_IsAlwaysSilent() {
         let h = HotkeyController()
         var events: [HotkeyController.Event] = []
         h.onEvent = { events.append($0) }
 
-        // Tap 1 (latch on): press + release < 300ms
+        // Press, hold for a while, release — recording stays on.
         h.handleRawKeyDown()
+        Thread.sleep(forTimeInterval: 0.5)
         h.handleRawKeyUp()
-        XCTAssertEqual(events, [.started], "release after a tap must NOT fire stopped — the latch holds the recording on")
+        XCTAssertEqual(events, [.started],
+                       "release must not fire stopped — toggle is on press only")
 
-        // Tap 2 (stop): the next press fires stopped immediately
+        // Press again — now it stops.
         h.handleRawKeyDown()
-        XCTAssertEqual(events, [.started, .stopped])
-
-        // The matching key-up after the stop tap is silent — no new
-        // session started, the recording is fully ended.
-        h.handleRawKeyUp()
         XCTAssertEqual(events, [.started, .stopped])
     }
 
-    /// Tap → latch → hold → release → latch should be CLEARED by the
-    /// stopping tap, not re-entered by the long press.
-    func testTap_Latch_ThenHoldRelease_IsCleanIdle() {
+    /// Press → stop → press → start: state returns to idle cleanly so
+    /// the next session works.
+    func testPress_AfterStop_StartsAgain() {
         let h = HotkeyController()
         var events: [HotkeyController.Event] = []
         h.onEvent = { events.append($0) }
 
-        // Tap: latch on
-        h.handleRawKeyDown(); h.handleRawKeyUp()
-        // Tap again: stop
-        h.handleRawKeyDown(); h.handleRawKeyUp()
-        // Now hold-release: should be a normal session, not a no-op
-        h.handleRawKeyDown()
-        Thread.sleep(forTimeInterval: 0.35)
-        h.handleRawKeyUp()
-
-        XCTAssertEqual(events, [.started, .stopped, .started, .stopped])
+        h.handleRawKeyDown(); h.handleRawKeyDown()  // start, stop
+        h.handleRawKeyDown()                         // start again
+        XCTAssertEqual(events, [.started, .stopped, .started])
     }
 
-    /// Two consecutive holds without a tap in between → two clean
-    /// started/stopped pairs.
-    func testHold_ThenHold_DoubleSession() {
+    /// Multiple key-ups between presses → all silent. Carbon shouldn't
+    /// deliver these but defensive against repeat-key behavior.
+    func testRepeatedKeyUp_StaysSilent() {
         let h = HotkeyController()
         var events: [HotkeyController.Event] = []
         h.onEvent = { events.append($0) }
 
         h.handleRawKeyDown()
-        Thread.sleep(forTimeInterval: 0.35)
         h.handleRawKeyUp()
-
-        h.handleRawKeyDown()
-        Thread.sleep(forTimeInterval: 0.35)
         h.handleRawKeyUp()
-
-        XCTAssertEqual(events, [.started, .stopped, .started, .stopped])
+        h.handleRawKeyUp()
+        XCTAssertEqual(events, [.started])
     }
 }

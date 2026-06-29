@@ -5,11 +5,13 @@
 // accessibility permission (which is only needed if we wanted to
 // *inject* keystrokes; we don't, we just listen).
 //
-// Gesture: **tap or hold**. A short press (< 300ms before release)
-// latches recording on — release doesn't stop it. A long press
-// (>= 300ms) is hold-to-talk — release stops. Tapping again while
-// latched stops. Both gestures coexist; the user picks per
-// utterance whichever fits.
+// Gesture: **pure tap-to-toggle.** Every press toggles recording —
+// press starts, press stops. KEY_UP events are silent. No timing
+// windows, no tap-vs-hold distinction, no finger strain from
+// holding a chord while talking. Sean's 0.8.4 report: holding the
+// two-key chord was uncomfortable; the old hybrid model (short-tap-
+// latches, long-press-holds) made every interaction a "did I tap
+// or hold" guess. The simpler model wins.
 
 import AppKit
 import Carbon.HIToolbox
@@ -47,56 +49,27 @@ final class HotkeyController {
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
 
-    /// State machine for tap-or-hold gesture.
-    private enum State {
-        case idle
-        case recording(downAt: Date)
-        case latched
-        case stoppingLatched
-    }
+    /// Pure tap-to-toggle: every press toggles recording. KEY_UP is
+    /// silent.
+    private enum State { case idle, recording }
     private var state: State = .idle
-    /// Press shorter than this is a "tap" (latch); longer is a "hold"
-    /// (release stops). Carbon delivers KEY_DOWN and KEY_UP with their
-    /// system timestamps; we compute the duration off our own Dates
-    /// since we don't need millisecond accuracy.
-    private static let tapThreshold: TimeInterval = 0.3
 
     /// Called from the Carbon event handler on KEY_DOWN.
     func handleRawKeyDown() {
         switch state {
         case .idle:
-            state = .recording(downAt: Date())
+            state = .recording
             onEvent?(.started)
-        case .latched:
-            // Tap-to-stop while latched. The recording is ending here;
-            // the matching KEY_UP just returns us to idle without
-            // starting a new session.
-            state = .stoppingLatched
+        case .recording:
+            state = .idle
             onEvent?(.stopped)
-        case .recording, .stoppingLatched:
-            break  // Carbon shouldn't deliver back-to-back DOWNs
         }
     }
 
-    /// Called from the Carbon event handler on KEY_UP.
-    func handleRawKeyUp() {
-        switch state {
-        case .recording(let downAt):
-            if Date().timeIntervalSince(downAt) < Self.tapThreshold {
-                // Tap → latch on; recording continues. No event to the
-                // outer pipeline; the session is already running.
-                state = .latched
-            } else {
-                // Hold-release → stop.
-                state = .idle
-                onEvent?(.stopped)
-            }
-        case .stoppingLatched:
-            state = .idle
-        case .idle, .latched:
-            break
-        }
-    }
+    /// Called from the Carbon event handler on KEY_UP. No-op by
+    /// design — the toggle fires on press, releases are silent so a
+    /// long press doesn't accidentally end the session.
+    func handleRawKeyUp() {}
 
     func register() {
         guard !isRegistered else { return }
