@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var listWindowController: NotesListWindowController?
     private var mcpServer: MCPServer?
     private var mcpConfigWindow: NSWindow?
+    private var voiceCapture: VoiceCaptureController?
 
     #if canImport(Sparkle)
     // In-app auto-updates. Start the updater only when a feed is configured —
@@ -81,6 +82,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selector: #selector(handleAppActivated),
             name: NSApplication.didBecomeActiveNotification,
             object: nil)
+
+        // Voice capture: register the global hotkey (⌃⌥V) so the user
+        // can talk-to-sticky from anywhere. Phase 1 (no audio yet)
+        // just inserts placeholder markers so the trigger path is
+        // visible; phases 2/3 swap in AVAudioEngine + WhisperKit.
+        let voice = VoiceCaptureController(store: store)
+        voice.resolveKeyStickyID = { [weak self] in self?.keyNoteID() }
+        voice.openNoteWindow = { [weak self] note, focus in
+            self?.openWindow(for: note, focus: focus)
+        }
+        voice.appendToOpenNote = { [weak self] id, text in
+            self?.controllers[id]?.appendText(text)
+        }
+        voice.start()
+        self.voiceCapture = voice
 
         // Start the local AI-access HTTP server if the user enabled it
         // last session. Failure is non-fatal (e.g. port conflict) — we

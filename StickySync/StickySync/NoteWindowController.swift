@@ -128,6 +128,30 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.orderOut(nil)
     }
 
+    /// Append text at the very end of the sticky's content, then bring
+    /// the window forward and place the cursor after the inserted
+    /// text. Used by VoiceCapture's hotkey path to flow live transcript
+    /// into a sticky without going through paste / NSPasteboard.
+    ///
+    /// Mirrors what user-typed input does: mutates the storage, posts
+    /// NSText.didChangeNotification so the delegate's `textDidChange`
+    /// runs the same save + sync path it would for a keystroke. (Same
+    /// pattern as the 0.7.31 checkbox-click fix.)
+    func appendText(_ text: String) {
+        guard !text.isEmpty else { return }
+        let storage = noteView.markdownStorage
+        let insertAt = storage.length
+        storage.replaceCharacters(in: NSRange(location: insertAt, length: 0),
+                                  with: text)
+        noteView.textView.setSelectedRange(
+            NSRange(location: storage.length, length: 0))
+        // Drive the editor's existing change-notification path so the
+        // save + sync side-effects fire naturally.
+        NotificationCenter.default.post(name: NSText.didChangeNotification,
+                                        object: noteView.textView)
+        window.makeKeyAndOrderFront(nil)
+    }
+
     // MARK: - Sync
 
     /// A remote update (CloudKit import, MCP write from another device)
