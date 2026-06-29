@@ -51,7 +51,7 @@ Two separate flows. They share `scripts/release_notes.sh` for changelog generati
 ./release.sh 0.3.2
 ```
 
-What it does (see header of `release.sh`): polished changelog → notarize → EdDSA-sign → appcast → `gh release create`. Tag is `v0.3.2` (unprefixed, GH Release auto-creates from `gh release create`). Last shipped: **0.8.3**.
+What it does (see header of `release.sh`): polished changelog → notarize → EdDSA-sign → appcast → `gh release create`. Tag is `v0.3.2` (unprefixed, GH Release auto-creates from `gh release create`). Last shipped: **0.8.4**.
 
 ### iOS → TestFlight
 
