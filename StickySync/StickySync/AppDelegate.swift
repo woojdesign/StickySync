@@ -103,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voice.replaceTrailingInNote = { [weak self] id, expected, new in
             self?.controllers[id]?.replaceTrailingMatch(expected, with: new)
         }
+        voice.replaceTailInNote = { [weak self] id, byteCount, text in
+            self?.controllers[id]?.replaceTail(byteCount: byteCount, with: text)
+        }
         voice.windowForSticky = { [weak self] id in
             self?.controllers[id]?.window
         }

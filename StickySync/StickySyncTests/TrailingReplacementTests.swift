@@ -64,4 +64,39 @@ final class TrailingReplacementTests: XCTestCase {
         XCTAssertNil(NoteWindowController.trailingReplacementRange(
             in: content, expected: expected))
     }
+
+    // MARK: - tailRange (0.8.4 reconciliation helper)
+
+    /// Last 5 chars of a 20-char string → range (15, 5).
+    func testTailRange_Standard() {
+        XCTAssertEqual(NoteWindowController.tailRange(in: 20, count: 5),
+                       NSRange(location: 15, length: 5))
+    }
+
+    /// Asking for more chars than exist → clamps to full length.
+    /// Prevents negative-location ranges that would crash AppKit.
+    func testTailRange_CountExceedsLength_ClampsToAll() {
+        XCTAssertEqual(NoteWindowController.tailRange(in: 5, count: 100),
+                       NSRange(location: 0, length: 5))
+    }
+
+    /// Zero count → empty range at end (replace nothing).
+    func testTailRange_ZeroCount_EmptyRangeAtEnd() {
+        XCTAssertEqual(NoteWindowController.tailRange(in: 10, count: 0),
+                       NSRange(location: 10, length: 0))
+    }
+
+    /// Empty content + any count → empty range at zero. Replace
+    /// nothing without crashing.
+    func testTailRange_EmptyContent() {
+        XCTAssertEqual(NoteWindowController.tailRange(in: 0, count: 5),
+                       NSRange(location: 0, length: 0))
+    }
+
+    /// Negative count is treated as zero (replace nothing). Defensive
+    /// — caller bug shouldn't crash.
+    func testTailRange_NegativeCount_TreatedAsZero() {
+        XCTAssertEqual(NoteWindowController.tailRange(in: 10, count: -3),
+                       NSRange(location: 10, length: 0))
+    }
 }

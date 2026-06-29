@@ -128,6 +128,39 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.orderOut(nil)
     }
 
+    /// Position-based tail replace: unconditionally swap the last
+    /// `byteCount` UTF-16 chars (clamped to storage length) with
+    /// `replacement`. Used by VoiceCapture's *reconciliation* step at
+    /// stop — the live-appended SFSpeech deltas drift from the
+    /// trimmed-final formattedString (SFSpeech revises earlier words
+    /// mid-session; my append-only flushPartial doesn't pick up the
+    /// revisions). Replacing the tail we wrote with `speechFinal`
+    /// makes the trailing-match for the subsequent polish swap
+    /// actually succeed.
+    ///
+    /// Unconditional (no `hasSuffix` guard) because this fires
+    /// synchronously inside `handleStopped`, before any user typing
+    /// can intervene. The trailing-match version is for the
+    /// asynchronous polish swap a beat later, where the user may
+    /// have typed.
+    func replaceTail(byteCount: Int, with replacement: String) {
+        let storage = noteView.markdownStorage
+        let range = Self.tailRange(in: storage.length, count: byteCount)
+        storage.replaceCharacters(in: range, with: replacement)
+        noteView.textView.setSelectedRange(
+            NSRange(location: storage.length, length: 0))
+        NotificationCenter.default.post(name: NSText.didChangeNotification,
+                                        object: noteView.textView)
+    }
+
+    /// Pure helper for `replaceTail`: range covering the last `count`
+    /// chars of a string of `length`, clamped so callers can't ask to
+    /// replace more than exists.
+    static func tailRange(in length: Int, count: Int) -> NSRange {
+        let len = max(0, min(count, length))
+        return NSRange(location: length - len, length: len)
+    }
+
     /// Replace the trailing `expected` substring with `replacement` —
     /// no-op if `expected` is no longer at the end (the user typed past
     /// it, or another sync replaced the content). Used by VoiceCapture's

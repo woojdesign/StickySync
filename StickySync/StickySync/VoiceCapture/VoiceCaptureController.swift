@@ -42,6 +42,12 @@ final class VoiceCaptureController {
     /// or no-op if the user has typed past it. Used by the WhisperKit
     /// polish path. Set by AppDelegate.
     var replaceTrailingInNote: ((UUID, _ expected: String, _ with: String) -> Void)?
+    /// Position-based tail replace — unconditionally swap the last
+    /// `byteCount` chars of the sticky with `replacement`. Set by
+    /// AppDelegate. Used by the reconciliation step at stop, before
+    /// the polish swap, to align the live-appended deltas with
+    /// SFSpeech's trimmed final.
+    var replaceTailInNote: ((UUID, _ byteCount: Int, _ replacement: String) -> Void)?
     /// Returns the NSWindow for a given sticky id, used to anchor the
     /// recording indicator. Set by AppDelegate.
     var windowForSticky: ((UUID) -> NSWindow?)?
@@ -177,11 +183,24 @@ final class VoiceCaptureController {
     /// real audio recorder / SFSpeech recognizer.
     func finalizeSession(speechFinal: String, audioURL: URL?) {
         guard let id = activeNoteID else { return }
-        // Final flush: write the remainder if SFSpeechRecognizer's
-        // last partial hadn't fully landed before we tore down.
-        if speechFinal.count > committedPartialLength {
-            let tail = String(speechFinal.suffix(speechFinal.count - committedPartialLength))
-            appendToOpenNote?(id, tail)
+
+        // *Reconciliation.* The live-appended deltas drift from
+        // SFSpeech's trimmed final formattedString because SFSpeech
+        // revises earlier words mid-session (e.g. "Palaye" → "Player",
+        // "thisseeing" → "this seeing") and my append-only flushPartial
+        // only adds NEW chars past the previous length — it never picks
+        // up the revisions. Result: the visible text and `speechFinal`
+        // diverge; the polish swap's hasSuffix check fails; the swap
+        // silently no-ops. Sean's 0.8.3 log paste was the smoking gun
+        // — finalize logged "polished — SFSpeech 22ch → Whisper 23ch"
+        // but the user saw no change. Replace the tail we wrote with
+        // `speechFinal` so the polish swap can find what it expects.
+        if committedPartialLength > 0 {
+            replaceTailInNote?(id, committedPartialLength, speechFinal)
+        } else if !speechFinal.isEmpty {
+            // No partials came through (very short utterance) but the
+            // final has text — append it directly.
+            appendToOpenNote?(id, speechFinal)
         }
         activeNoteID = nil
         committedPartialLength = 0
