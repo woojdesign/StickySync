@@ -15,21 +15,40 @@ import AppKit
 
 final class RecordingIndicator {
 
-    private let window: NSWindow
-    private let dot: NSView
-    private let label: NSTextField
+    /// Visual state the pill is currently showing. `none` means hidden.
+    /// Surfaced internal so tests can pin the state-transition contract
+    /// of VoiceCaptureController (listening → polishing → none).
+    enum State: Equatable { case none, listening, polishing }
+    private(set) var state: State = .none
+
+    /// Lazy AppKit chrome — created on first show so tests can
+    /// instantiate VoiceCaptureController without standing up an
+    /// NSWindow (under XCTest the AppKit cycle isn't bootstrapped
+    /// enough for the borderless-floating window the indicator
+    /// uses, and creating one aborts).
+    private struct Chrome {
+        let window: NSWindow
+        let dot: NSView
+        let spinner: NSProgressIndicator
+        let label: NSTextField
+    }
+    private var chrome: Chrome?
+
     private var pulseAnimation: CABasicAnimation?
     /// The sticky window we're shadowing. Reposition the indicator
     /// whenever it moves or resizes.
     private weak var anchor: NSWindow?
     private var anchorObservers: [Any] = []
 
-    init() {
+    init() {}
+
+    private func ensureChrome() -> Chrome {
+        if let chrome { return chrome }
         let frame = NSRect(x: 0, y: 0, width: 120, height: 28)
-        window = NSWindow(contentRect: frame,
-                          styleMask: [.borderless],
-                          backing: .buffered,
-                          defer: false)
+        let window = NSWindow(contentRect: frame,
+                              styleMask: [.borderless],
+                              backing: .buffered,
+                              defer: false)
         window.isOpaque = false
         window.backgroundColor = .clear
         window.level = .floating
@@ -42,13 +61,20 @@ final class RecordingIndicator {
         pill.layer?.cornerCurve = .continuous
         pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.78).cgColor
 
-        dot = NSView(frame: NSRect(x: 10, y: 9, width: 10, height: 10))
+        let dot = NSView(frame: NSRect(x: 10, y: 9, width: 10, height: 10))
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 5
         dot.layer?.backgroundColor = NSColor.systemRed.cgColor
         pill.addSubview(dot)
 
-        label = NSTextField(labelWithString: "Listening…")
+        let spinner = NSProgressIndicator(frame: NSRect(x: 9, y: 6, width: 14, height: 14))
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.isHidden = true
+        pill.addSubview(spinner)
+
+        let label = NSTextField(labelWithString: "Listening…")
         label.frame = NSRect(x: 28, y: 5, width: 84, height: 18)
         label.font = .systemFont(ofSize: 12, weight: .medium)
         label.textColor = .white
@@ -57,16 +83,60 @@ final class RecordingIndicator {
         pill.addSubview(label)
 
         window.contentView = pill
+        let made = Chrome(window: window, dot: dot, spinner: spinner, label: label)
+        chrome = made
+        return made
     }
 
-    /// Show the indicator pinned above the given sticky window's top
-    /// edge. Tracks its motion until `hide()` is called.
-    func show(over anchorWindow: NSWindow) {
+    /// Show the indicator in "Listening…" state, pinned above the
+    /// sticky's top edge. Tracks motion until `hide()` or transition
+    /// to polishing.
+    func showListening(over anchorWindow: NSWindow) {
+        let c = ensureChrome()
         anchor = anchorWindow
+        applyListeningVisuals(c)
         reposition()
-        window.orderFrontRegardless()
-        startPulse()
-        // Reposition on move/resize so the indicator stays anchored.
+        c.window.orderFrontRegardless()
+        installAnchorObservers(anchorWindow)
+        state = .listening
+    }
+
+    /// Transition to "Polishing…" state — same anchor, different
+    /// visual (NSProgressIndicator spinner instead of the pulsing red
+    /// dot). Called by VoiceCaptureController after stop while the
+    /// WhisperKit finalize pass runs (which can take seconds for
+    /// transcribe, or tens of seconds on first-run while the ~150MB
+    /// base.en model downloads). Without this state the user has no
+    /// signal that anything is still happening — they see the
+    /// SFSpeech text settled and assume polish is broken (Sean's
+    /// 0.8.1 report).
+    func showPolishing() {
+        state = .polishing
+        // If no chrome was ever shown (test environment, or polish
+        // fires without a prior listening session), skip the visual
+        // update — the state flag is still tracked for the
+        // VoiceCaptureController contract.
+        guard let chrome else { return }
+        applyPolishingVisuals(chrome)
+        if !chrome.window.isVisible {
+            chrome.window.orderFrontRegardless()
+        }
+    }
+
+    func hide() {
+        state = .none
+        for token in anchorObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+        anchorObservers.removeAll()
+        anchor = nil
+        guard let chrome else { return }
+        stopPulse()
+        chrome.spinner.stopAnimation(nil)
+        chrome.window.orderOut(nil)
+    }
+
+    private func installAnchorObservers(_ anchorWindow: NSWindow) {
         let center = NotificationCenter.default
         for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
             let token = center.addObserver(forName: name, object: anchorWindow,
@@ -77,39 +147,45 @@ final class RecordingIndicator {
         }
     }
 
-    func hide() {
+    private func applyListeningVisuals(_ c: Chrome) {
+        c.dot.isHidden = false
+        c.spinner.isHidden = true
+        c.spinner.stopAnimation(nil)
+        c.label.stringValue = "Listening…"
+        startPulse(c)
+    }
+
+    private func applyPolishingVisuals(_ c: Chrome) {
         stopPulse()
-        window.orderOut(nil)
-        for token in anchorObservers {
-            NotificationCenter.default.removeObserver(token)
-        }
-        anchorObservers.removeAll()
-        anchor = nil
+        c.dot.isHidden = true
+        c.spinner.isHidden = false
+        c.spinner.startAnimation(nil)
+        c.label.stringValue = "Polishing…"
     }
 
     private func reposition() {
-        guard let anchor else { return }
+        guard let chrome, let anchor else { return }
         let a = anchor.frame
-        let w = window.frame.size
+        let w = chrome.window.frame.size
         // Centered above the sticky's top edge, 4pt gap.
         let origin = NSPoint(x: a.midX - w.width / 2,
                              y: a.maxY + 4)
-        window.setFrame(NSRect(origin: origin, size: w), display: true)
+        chrome.window.setFrame(NSRect(origin: origin, size: w), display: true)
     }
 
-    private func startPulse() {
+    private func startPulse(_ chrome: Chrome) {
         let pulse = CABasicAnimation(keyPath: "opacity")
         pulse.fromValue = 1.0
         pulse.toValue = 0.4
         pulse.duration = 0.8
         pulse.autoreverses = true
         pulse.repeatCount = .infinity
-        dot.layer?.add(pulse, forKey: "pulse")
+        chrome.dot.layer?.add(pulse, forKey: "pulse")
         pulseAnimation = pulse
     }
 
     private func stopPulse() {
-        dot.layer?.removeAnimation(forKey: "pulse")
+        chrome?.dot.layer?.removeAnimation(forKey: "pulse")
         pulseAnimation = nil
     }
 

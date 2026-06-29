@@ -25,9 +25,14 @@ import Speech
 final class VoiceCaptureController {
 
     private let hotkey = HotkeyController()
-    private let recorder = MacAudioRecorder()
-    private let transcriber = SpeechTranscriber()
-    private let finalizer: TranscriptionFinalizer = WhisperKitFinalizer()
+    // Lazy: AVAudioEngine + SFSpeechRecognizer init abort under XCTest
+    // (no audio device + no speech-recognition context bootstrapped).
+    // Real-use path always goes through handleStarted which accesses
+    // both before any audio runs; tests of the polish-finalize layer
+    // call finalizeSession directly and never touch them.
+    private lazy var recorder = MacAudioRecorder()
+    private lazy var transcriber = SpeechTranscriber()
+    private let finalizer: TranscriptionFinalizer
     private let store: NoteStore
 
     var resolveKeyStickyID: (() -> UUID?)?
@@ -54,8 +59,10 @@ final class VoiceCaptureController {
     private var insertionAnchor: Int = 0
     private var partialSubscription: AnyCancellable?
 
-    init(store: NoteStore) {
+    init(store: NoteStore,
+         finalizer: TranscriptionFinalizer = WhisperKitFinalizer()) {
         self.store = store
+        self.finalizer = finalizer
         hotkey.onEvent = { [weak self] event in
             switch event {
             case .started: self?.handleStarted()
@@ -63,6 +70,7 @@ final class VoiceCaptureController {
             }
         }
     }
+
 
     func start() { hotkey.register() }
     func stop()  { hotkey.unregister() }
@@ -101,7 +109,7 @@ final class VoiceCaptureController {
             // they're not looking at the editor (cursor elsewhere,
             // window in a different Space, etc.).
             if let anchorWindow = windowForSticky?(targetID) {
-                indicator.show(over: anchorWindow)
+                indicator.showListening(over: anchorWindow)
             }
             activeNoteID = targetID
             committedPartialLength = 0
@@ -155,12 +163,20 @@ final class VoiceCaptureController {
     }
 
     private func handleStopped() {
-        guard let id = activeNoteID else { return }
         let audioURL = recorder.fileURL
         recorder.stop()
-        indicator.hide()
         let speechFinal = transcriber.end()
         partialSubscription = nil
+        finalizeSession(speechFinal: speechFinal, audioURL: audioURL)
+    }
+
+    /// The post-recording orchestration — flushing the SFSpeech tail
+    /// into the sticky and kicking off the WhisperKit polish pass.
+    /// Internal so tests can pin the indicator state-transition
+    /// contract (Listening → Polishing → none) without driving the
+    /// real audio recorder / SFSpeech recognizer.
+    func finalizeSession(speechFinal: String, audioURL: URL?) {
+        guard let id = activeNoteID else { return }
         // Final flush: write the remainder if SFSpeechRecognizer's
         // last partial hadn't fully landed before we tore down.
         if speechFinal.count > committedPartialLength {
@@ -170,20 +186,31 @@ final class VoiceCaptureController {
         activeNoteID = nil
         committedPartialLength = 0
 
-        // WhisperKit polish pass — re-transcribes the saved CAF on the
-        // Neural Engine and silently replaces the SFSpeech text with
-        // the higher-accuracy version a beat later. We only swap if
-        // the SFSpeech text is still at the trailing edge of the
-        // sticky; if the user typed after, we leave their edits
-        // alone (the SFSpeech text stays as-is rather than getting
-        // partially clobbered).
-        guard !speechFinal.isEmpty else { return }
-        Task { [finalizer, replaceTrailingInNote] in
+        // No transcript → no polish to run; hide the indicator now.
+        guard !speechFinal.isEmpty else {
+            indicator.hide()
+            return
+        }
+
+        // Transition Listening → Polishing instead of hiding. The
+        // user sees a spinner + "Polishing…" until the WhisperKit pass
+        // returns. Sean's 0.8.1 report: on first-run the model
+        // download (~150MB) happens silently during polish and the
+        // user assumes polish is broken because the SFSpeech text
+        // never updates. The visible "Polishing…" state covers both
+        // the transcribe wait (a couple seconds) AND the first-run
+        // download wait (tens of seconds) without us needing to
+        // distinguish them in copy.
+        indicator.showPolishing()
+
+        Task { [finalizer, replaceTrailingInNote, indicator] in
             let polished = await finalizer.finalize(audioURL: audioURL,
                                                     fastPartial: speechFinal)
-            guard polished != speechFinal else { return }
             await MainActor.run {
-                replaceTrailingInNote?(id, speechFinal, polished)
+                if polished != speechFinal {
+                    replaceTrailingInNote?(id, speechFinal, polished)
+                }
+                indicator.hide()
             }
         }
     }
