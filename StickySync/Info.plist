@@ -17,6 +17,10 @@
 	</array>
 	<key>CKSharingSupported</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>StickySync uses your microphone for voice capture — press the hotkey to talk straight into a sticky.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>StickySync uses speech recognition to turn your voice into text inside a sticky as you talk.</string>
 	<key>SUFeedURL</key>
 	<string>https://github.com/woojdesign/StickySync/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
