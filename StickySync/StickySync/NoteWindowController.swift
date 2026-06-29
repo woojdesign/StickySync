@@ -128,6 +128,30 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.orderOut(nil)
     }
 
+    /// Replace the trailing `expected` substring with `replacement` —
+    /// no-op if `expected` is no longer at the end (the user typed past
+    /// it, or another sync replaced the content). Used by VoiceCapture's
+    /// WhisperKit polish path: when the high-fidelity transcript
+    /// arrives a beat after the SFSpeech live partial settled, we want
+    /// to silently swap the partial for the polished text — but only
+    /// when the partial is still the last thing in the sticky, so we
+    /// never overwrite something the user typed after.
+    func replaceTrailingMatch(_ expected: String, with replacement: String) {
+        guard !expected.isEmpty else { return }
+        let storage = noteView.markdownStorage
+        let full = storage.string as NSString
+        let expectedNS = expected as NSString
+        guard full.length >= expectedNS.length else { return }
+        guard full.hasSuffix(expected) else { return }
+        let range = NSRange(location: full.length - expectedNS.length,
+                            length: expectedNS.length)
+        storage.replaceCharacters(in: range, with: replacement)
+        noteView.textView.setSelectedRange(
+            NSRange(location: storage.length, length: 0))
+        NotificationCenter.default.post(name: NSText.didChangeNotification,
+                                        object: noteView.textView)
+    }
+
     /// Append text at the very end of the sticky's content, then bring
     /// the window forward and place the cursor after the inserted
     /// text. Used by VoiceCapture's hotkey path to flow live transcript

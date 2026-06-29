@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		91286330B861743A7935D7FA /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = B12DC43D40BD40618BB5139E /* WhisperKit */; };
 		A700525F2FE5D0680081736C /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A700525E2FE5D0680081736C /* NotesKit */; };
 		A70052622FE6DC700081736C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A70052612FE6DC700081736C /* Sparkle */; };
 		A71D717B2FE833D7008D48F6 /* NotesKit in Frameworks */ = {isa = PBXBuildFile; productRef = A71D717A2FE833D7008D48F6 /* NotesKit */; };
@@ -90,6 +91,7 @@
 				A700525F2FE5D0680081736C /* NotesKit in Frameworks */,
 				A78F031F2FE88FCF00485C17 /* WoojTokens in Frameworks */,
 				A70052622FE6DC700081736C /* Sparkle in Frameworks */,
+				91286330B861743A7935D7FA /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -177,6 +179,7 @@
 				A700525E2FE5D0680081736C /* NotesKit */,
 				A70052612FE6DC700081736C /* Sparkle */,
 				A78F031E2FE88FCF00485C17 /* WoojTokens */,
+				B12DC43D40BD40618BB5139E /* WhisperKit */,
 			);
 			productName = StickySync;
 			productReference = A700523D2FE5C55D0081736C /* StickySync.app */;
@@ -868,6 +871,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A792D3672FEFFA9D00F1CBD3 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */;
 			productName = SnapshotTesting;
+		};
+		B12DC43D40BD40618BB5139E /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A77762D22FE8A36E0088DECB /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

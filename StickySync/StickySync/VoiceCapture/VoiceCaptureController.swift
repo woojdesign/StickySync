@@ -5,13 +5,12 @@
 // target sticky (key window if any, else fresh sticky).
 //
 // Phase 1 + 2 (this file's current scope):
-//   - Hotkey hold-to-record gesture
+//   - Hotkey tap-or-hold gesture (latch on quick tap, hold to talk)
 //   - AVAudioEngine recording → CAF on disk
 //   - SFSpeechRecognizer live partial transcripts appended into the
 //     target sticky as the user talks
-//
-// Phase 3 (planned): WhisperKit final pass on the saved CAF, replacing
-// SFSpeechRecognizer's output with higher-accuracy text on stop.
+//   - WhisperKit final pass on the saved CAF replaces the SFSpeech
+//     tail with higher-accuracy text a beat after stop (0.8.1)
 //
 // Targeting policy: if a StickySync sticky is the key window when the
 // hotkey fires, capture appends into *that* sticky. Otherwise a fresh
@@ -28,11 +27,16 @@ final class VoiceCaptureController {
     private let hotkey = HotkeyController()
     private let recorder = MacAudioRecorder()
     private let transcriber = SpeechTranscriber()
+    private let finalizer: TranscriptionFinalizer = WhisperKitFinalizer()
     private let store: NoteStore
 
     var resolveKeyStickyID: (() -> UUID?)?
     var openNoteWindow: ((Note, _ focus: Bool) -> Void)?
     var appendToOpenNote: ((UUID, String) -> Void)?
+    /// Replace `expected` at the end of the given sticky with `with` —
+    /// or no-op if the user has typed past it. Used by the WhisperKit
+    /// polish path. Set by AppDelegate.
+    var replaceTrailingInNote: ((UUID, _ expected: String, _ with: String) -> Void)?
     /// Returns the NSWindow for a given sticky id, used to anchor the
     /// recording indicator. Set by AppDelegate.
     var windowForSticky: ((UUID) -> NSWindow?)?
@@ -122,6 +126,12 @@ final class VoiceCaptureController {
                 return
             }
 
+            // Kick off the WhisperKit model load now so it's ready by
+            // the time the user stops talking — no extra wait at the
+            // end. First call also triggers the ~150MB model download
+            // if it isn't cached yet (~/Library/Application Support/…).
+            finalizer.prewarm()
+
             // Stream live partials into the sticky as they grow. Use
             // Combine on the @Published `partial` (KVO doesn't observe
             // @Published — would need @objc dynamic for that). We
@@ -146,20 +156,36 @@ final class VoiceCaptureController {
 
     private func handleStopped() {
         guard let id = activeNoteID else { return }
+        let audioURL = recorder.fileURL
         recorder.stop()
         indicator.hide()
-        let final = transcriber.end()
+        let speechFinal = transcriber.end()
         partialSubscription = nil
         // Final flush: write the remainder if SFSpeechRecognizer's
-        // last partial hadn't fully landed before we tore down. The
-        // `final` string is the complete transcript; subtract what
-        // we've already written to compute the tail.
-        if final.count > committedPartialLength {
-            let tail = String(final.suffix(final.count - committedPartialLength))
+        // last partial hadn't fully landed before we tore down.
+        if speechFinal.count > committedPartialLength {
+            let tail = String(speechFinal.suffix(speechFinal.count - committedPartialLength))
             appendToOpenNote?(id, tail)
         }
         activeNoteID = nil
         committedPartialLength = 0
+
+        // WhisperKit polish pass — re-transcribes the saved CAF on the
+        // Neural Engine and silently replaces the SFSpeech text with
+        // the higher-accuracy version a beat later. We only swap if
+        // the SFSpeech text is still at the trailing edge of the
+        // sticky; if the user typed after, we leave their edits
+        // alone (the SFSpeech text stays as-is rather than getting
+        // partially clobbered).
+        guard !speechFinal.isEmpty else { return }
+        Task { [finalizer, replaceTrailingInNote] in
+            let polished = await finalizer.finalize(audioURL: audioURL,
+                                                    fastPartial: speechFinal)
+            guard polished != speechFinal else { return }
+            await MainActor.run {
+                replaceTrailingInNote?(id, speechFinal, polished)
+            }
+        }
     }
 
     /// Called whenever `transcriber.partial` updates. Writes just the

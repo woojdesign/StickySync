@@ -100,6 +100,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voice.appendToOpenNote = { [weak self] id, text in
             self?.controllers[id]?.appendText(text)
         }
+        voice.replaceTrailingInNote = { [weak self] id, expected, new in
+            self?.controllers[id]?.replaceTrailingMatch(expected, with: new)
+        }
         voice.windowForSticky = { [weak self] id in
             self?.controllers[id]?.window
         }
