@@ -31,6 +31,13 @@ enum SyncLog {
     /// (decision names) so the predicate filter stays simple.
     static let gate = Logger(subsystem: "wooj.sync.lww", category: "gate")
 
+    /// Voice-capture pipeline logger — every step of the WhisperKit
+    /// polish path so we can tell "Whisper agreed with SFSpeech" from
+    /// "Whisper silently errored" from "model still downloading." Pre-
+    /// 0.8.3 these all looked identical to the user (no text change,
+    /// no error). Query: `log show --predicate 'subsystem == "wooj.voice"' --last 10m`
+    static let voice = Logger(subsystem: "wooj.voice", category: "polish")
+
     /// Format a Note ID for the log — short suffix is enough to correlate
     /// across events without leaking the full UUID into a support bundle.
     static func short(_ id: UUID) -> String {

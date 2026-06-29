@@ -210,7 +210,28 @@ final class VoiceCaptureController {
                 if polished != speechFinal {
                     replaceTrailingInNote?(id, speechFinal, polished)
                 }
-                indicator.hide()
+                // Inspect the finalizer's last outcome to differentiate
+                // genuine no-improvement from silent error — Sean's 0.8.2
+                // report flagged that they look identical to the user.
+                // WhisperKitFinalizer is the only finalizer that
+                // populates lastOutcome; for SpeechFinalizer (iOS fast
+                // path) the cast just fails and we hide silently.
+                if let wk = finalizer as? WhisperKitFinalizer {
+                    switch wk.lastOutcome {
+                    case .noAudio:
+                        indicator.showFailed(detail: "no audio recorded")
+                    case .modelLoadFailed:
+                        indicator.showFailed(detail: "model loading…")
+                    case .transcribeFailed:
+                        indicator.showFailed(detail: "transcribe failed")
+                    case .emptyTranscript:
+                        indicator.showFailed(detail: "no speech detected")
+                    case .polished, .identicalToSFSpeech, .notRunYet:
+                        indicator.hide()
+                    }
+                } else {
+                    indicator.hide()
+                }
             }
         }
     }

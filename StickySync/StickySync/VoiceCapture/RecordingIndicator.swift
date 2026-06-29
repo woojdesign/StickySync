@@ -18,7 +18,7 @@ final class RecordingIndicator {
     /// Visual state the pill is currently showing. `none` means hidden.
     /// Surfaced internal so tests can pin the state-transition contract
     /// of VoiceCaptureController (listening → polishing → none).
-    enum State: Equatable { case none, listening, polishing }
+    enum State: Equatable { case none, listening, polishing, failed }
     private(set) var state: State = .none
 
     /// Lazy AppKit chrome — created on first show so tests can
@@ -123,6 +123,28 @@ final class RecordingIndicator {
         }
     }
 
+    /// Briefly flash a failure pill ("⚠ Polish failed") so the user
+    /// has a real signal when WhisperKit errored (model still
+    /// downloading, transcribe failed, audio missing). Auto-hides
+    /// after `autoHideAfter` seconds. Pre-fix the failure path was
+    /// indistinguishable from a clean no-improvement polish.
+    func showFailed(detail: String? = nil, autoHideAfter: TimeInterval = 2.5) {
+        state = .failed
+        guard let chrome else { return }
+        applyFailedVisuals(chrome, detail: detail)
+        if !chrome.window.isVisible {
+            chrome.window.orderFrontRegardless()
+        }
+        // Auto-hide on the main queue. If hide() is called sooner
+        // (e.g. user kicks off another capture), the state guard
+        // below makes this a no-op.
+        let snapshotState = state
+        DispatchQueue.main.asyncAfter(deadline: .now() + autoHideAfter) { [weak self] in
+            guard let self, self.state == snapshotState else { return }
+            self.hide()
+        }
+    }
+
     func hide() {
         state = .none
         for token in anchorObservers {
@@ -149,6 +171,7 @@ final class RecordingIndicator {
 
     private func applyListeningVisuals(_ c: Chrome) {
         c.dot.isHidden = false
+        c.dot.layer?.backgroundColor = NSColor.systemRed.cgColor   // reset from .failed
         c.spinner.isHidden = true
         c.spinner.stopAnimation(nil)
         c.label.stringValue = "Listening…"
@@ -161,6 +184,15 @@ final class RecordingIndicator {
         c.spinner.isHidden = false
         c.spinner.startAnimation(nil)
         c.label.stringValue = "Polishing…"
+    }
+
+    private func applyFailedVisuals(_ c: Chrome, detail: String?) {
+        stopPulse()
+        c.spinner.stopAnimation(nil)
+        c.spinner.isHidden = true
+        c.dot.isHidden = false
+        c.dot.layer?.backgroundColor = NSColor.systemYellow.cgColor
+        c.label.stringValue = detail.map { "⚠ \($0)" } ?? "⚠ Polish failed"
     }
 
     private func reposition() {

@@ -75,4 +75,30 @@ final class PolishIndicatorTests: XCTestCase {
         XCTAssertEqual(indicator.state, .none,
                        "indicator hides once polish completes")
     }
+
+    /// 0.8.3 surface: showFailed immediately transitions to .failed.
+    /// (The auto-hide timing is not unit-tested — DispatchQueue.main
+    /// .asyncAfter doesn't fire reliably under XCTest's runloop
+    /// pumping, even with RunLoop.main.run(until:). The behavior is
+    /// trivial and observable in production; documenting the gap
+    /// rather than chasing a flaky test.)
+    @MainActor func testShowFailed_TransitionsToFailed() {
+        let indicator = RecordingIndicator()
+        indicator.showFailed(detail: "test", autoHideAfter: 1.0)
+        XCTAssertEqual(indicator.state, .failed)
+    }
+
+    /// If hide() is called before the auto-hide fires, the auto-hide
+    /// becomes a no-op — no flicker, no second hide-after-already-hidden.
+    @MainActor func testShowFailed_ExternalHideBeforeTimeout_IsClean() {
+        let indicator = RecordingIndicator()
+        indicator.showFailed(detail: "x", autoHideAfter: 0.1)
+        XCTAssertEqual(indicator.state, .failed)
+        indicator.hide()
+        XCTAssertEqual(indicator.state, .none)
+        // Run past the would-be auto-hide; state should stay .none
+        // (the snapshot guard inside showFailed prevents re-hide).
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertEqual(indicator.state, .none)
+    }
 }
