@@ -40,16 +40,29 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             self.expandedHeight = frame.height
         }
 
-        window = NoteWindow(contentRect: frame,
-                            styleMask: [.borderless, .resizable],
-                            backing: .buffered,
-                            defer: false)
+        // Chrome redesign A: real window with native traffic lights at
+        // top-left (HIG-compliant close, free drag, ⌘W). Title bar is
+        // transparent + title hidden so the sticky's color extends edge-
+        // to-edge — the only "Mac" thing visible is the traffic light
+        // close button. `.fullSizeContentView` lets the colored content
+        // view extend behind the title bar (the bar overlays).
+        window = NoteWindow(
+            contentRect: frame,
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.level = .normal
-        window.minSize = NSSize(width: 170, height: 18)
+        // Increased min-height so the title bar's ~28pt area doesn't
+        // crush the content. Min-width unchanged.
+        window.minSize = NSSize(width: 170, height: 80)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
@@ -84,6 +97,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         }
 
         noteView.onColor = { [weak self] in self?.showColorPopover() }
+        noteView.onPickColor = { [weak self] token in self?.setColorToken(token) }
         noteView.onFont = { [weak self] in self?.showFontPopover() }
         noteView.onClose = { [weak self] in self?.requestClose() }
         noteView.onToggleCollapse = { [weak self] in self?.toggleCollapse() }
@@ -538,8 +552,21 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
                     preferredEdge: .minY)
     }
 
-    // MARK: - Color / font popovers
+    // MARK: - Color / font
 
+    /// Direct color set — fired by the bottom-strip palette buttons.
+    /// No popover, no extra confirm; tap a color, it's the color.
+    private func setColorToken(_ token: String) {
+        guard token != note.colorToken else { return }
+        note.colorToken = token
+        applyAppearance()
+        saveNow()
+    }
+
+    /// Legacy popover path — kept in case any code (theme menus,
+    /// future menu items) still wants the popover-based picker.
+    /// Anchored to the bottom strip now that the old `colorButton`
+    /// in the header is gone.
     private func showColorPopover() {
         let controller = ColorPaletteController(selected: note.colorToken)
         let popover = NSPopover()
@@ -547,14 +574,12 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         popover.contentViewController = controller
         controller.onSelect = { [weak self, weak popover] token in
             guard let self else { return }
-            self.note.colorToken = token
-            self.applyAppearance()
-            self.saveNow()
+            self.setColorToken(token)
             popover?.performClose(nil)
         }
-        popover.show(relativeTo: noteView.colorButton.bounds,
-                     of: noteView.colorButton,
-                     preferredEdge: .maxY)
+        popover.show(relativeTo: noteView.bottomStrip.bounds,
+                     of: noteView.bottomStrip,
+                     preferredEdge: .minY)
     }
 
     private func showFontPopover() {
@@ -597,7 +622,10 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
         note.collapsed = collapsed
         var frame = window.frame
-        let collapsedHeight = noteView.headerHeight
+        // Collapsed = just the title bar (with traffic lights) + the
+        // bottom strip visible. Replaces the old top-header
+        // collapsedHeight.
+        let collapsedHeight = noteView.titleBarInset + noteView.bottomStripHeight
 
         if collapsed {
             expandedHeight = frame.height
@@ -621,6 +649,16 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     private func requestClose() {
         onRequestClose?(note.id)
+    }
+
+    /// Intercept the native traffic-light close so the AppDelegate's
+    /// hide-vs-soft-delete-on-empty policy (0.8.10) still fires.
+    /// Returning false → we handle the dismissal ourselves through
+    /// `onRequestClose`; AppKit's default "close + release" path is
+    /// bypassed.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        requestClose()
+        return false
     }
 
     // MARK: - Layout persistence
