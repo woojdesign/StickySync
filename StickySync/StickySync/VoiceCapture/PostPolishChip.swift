@@ -51,7 +51,9 @@ final class PostPolishChip {
 
     private func ensureChrome() -> Chrome {
         if let chrome { return chrome }
-        let frame = NSRect(x: 0, y: 0, width: 168, height: 32)
+        // Width fits "Copy & Delete" (132pt) + 8pt gap + "Delete"
+        // (78pt) + 12pt padding (6 each side) = 236pt.
+        let frame = NSRect(x: 0, y: 0, width: 236, height: 32)
         let window = NSWindow(contentRect: frame,
                               styleMask: [.borderless],
                               backing: .buffered,
@@ -68,16 +70,19 @@ final class PostPolishChip {
         pill.layer?.cornerCurve = .continuous
         pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.82).cgColor
 
-        let copy = makeButton(title: "Copy",
+        // 0.9.2 relabel: "Copy" → "Copy & Delete" so the combined
+        // action is explicit. The button always did both (copy text
+        // + soft-delete the sticky); the old label hid that.
+        let copy = makeButton(title: "Copy & Delete",
                               symbol: "doc.on.doc",
                               action: #selector(handleCopy))
-        copy.frame = NSRect(x: 6, y: 4, width: 78, height: 24)
+        copy.frame = NSRect(x: 6, y: 4, width: 132, height: 24)
         pill.addSubview(copy)
 
         let delete = makeButton(title: "Delete",
                                 symbol: "trash",
                                 action: #selector(handleDelete))
-        delete.frame = NSRect(x: 86, y: 4, width: 78, height: 24)
+        delete.frame = NSRect(x: 140, y: 4, width: 78, height: 24)
         pill.addSubview(delete)
 
         window.contentView = pill

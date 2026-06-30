@@ -12,49 +12,31 @@ struct SavedView: View {
     @State private var landed = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(spacing: WoojSpace.lg) {
-                sticky
-                    .scaleEffect(landed ? 1 : 0.92)
-                    .opacity(landed ? 1 : 0)
-                    .contentShape(Rectangle())
-                    .onTapGesture { vm.recapture() }
+        VStack(spacing: WoojSpace.lg) {
+            sticky
+                .scaleEffect(landed ? 1 : 0.92)
+                .opacity(landed ? 1 : 0)
+                .contentShape(Rectangle())
+                .onTapGesture { vm.recapture() }
 
-                paletteDock
-                    .opacity(landed ? 1 : 0)
+            paletteDock
+                .opacity(landed ? 1 : 0)
 
-                // Once polish completes (refining flips false) the
-                // dismiss timer pauses (CaptureViewModel.scheduleDismiss)
-                // and the user gets explicit actions. 0.9.1: mirrors
-                // Mac's PostPolishChip — Copy hands the polished text
-                // to the pasteboard + deletes the sticky; Delete
-                // discards without copying.
-                if !vm.refining && landed {
-                    postPolishActions
-                        .transition(.opacity)
-                } else {
-                    hint
-                        .opacity(landed ? 1 : 0)
-                }
-            }
-            .padding(.horizontal, WoojSpace.xl)
-
-            // Explicit dismiss-without-action (X) — needed because the
-            // post-polish state pauses auto-dismiss. Top-right corner so
-            // it's discoverable without competing with the sticky.
+            // 0.9.2 revision: relabel Copy → Copy & Delete so the
+            // combined action is explicit (Sean: "we should be able to
+            // copy and delete in one go" — it always did, the old
+            // label just hid that). X button removed; auto-dismiss
+            // restored at 6s post-polish (in CaptureViewModel
+            // .scheduleDismiss) so the card doesn't linger.
             if !vm.refining && landed {
-                Button { vm.dismissNow() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(WoojColor.muted)
-                        .padding(14)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Done")
-                .transition(.opacity)
+                postPolishActions
+                    .transition(.opacity)
+            } else {
+                hint
+                    .opacity(landed ? 1 : 0)
             }
         }
+        .padding(.horizontal, WoojSpace.xl)
         .animation(WoojMotion.calm.animation, value: vm.refining)
         .onAppear {
             withAnimation(WoojMotion.settle.animation) { landed = true }
@@ -63,7 +45,7 @@ struct SavedView: View {
 
     private var postPolishActions: some View {
         HStack(spacing: WoojSpace.md) {
-            actionButton(title: "Copy",
+            actionButton(title: "Copy & Delete",
                          symbol: "doc.on.doc",
                          tint: WoojColor.clay) { vm.copyAndDelete() }
             actionButton(title: "Delete",

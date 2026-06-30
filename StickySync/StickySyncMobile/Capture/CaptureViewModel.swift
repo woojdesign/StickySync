@@ -42,7 +42,15 @@ final class CaptureViewModel: ObservableObject {
     private var starting = false
 
     private let tick: TimeInterval = 0.05
-    private let savedDwell: TimeInterval = 1.8
+    /// How long the SavedView lingers after polish completes,
+    /// giving the user a chance to read the polished text + tap
+    /// Copy & Delete / Delete before auto-dismiss. Bumped from
+    /// the old 1.8s in 0.9.2 to match the Mac chip cadence and
+    /// give comfortable reading time. The 0.9.1 indefinite-pause
+    /// was Sean's first read, retracted in 0.9.2 ("Dismiss should
+    /// happen after a few seconds") — long enough to act, short
+    /// enough to feel calm.
+    private let savedDwell: TimeInterval = 6.0
 
     init(store: NoteStore? = nil) {
         // Write through the app's shared store when given one, so captured notes
@@ -221,6 +229,11 @@ final class CaptureViewModel: ObservableObject {
             // explicitly dismisses (Copy/Delete action or X tap). The auto-
             // dismiss after polish was Sean's call to remove in 0.9.1 so the
             // post-polish chip on iOS doesn't vanish before the user reads it.
+            // Wait for polish to complete (cap so a cold model download
+            // can't pin forever). Then dwell `savedDwell` so the user
+            // can read + tap Copy & Delete / Delete before auto-
+            // dismiss. 0.9.2 revision: dwell bumped to 6s (was 1.8s)
+            // since the post-polish actions need real reading time.
             let cap = 6.0, step = 0.1
             var waited = 0.0
             while self.refining && waited < cap {
@@ -228,14 +241,6 @@ final class CaptureViewModel: ObservableObject {
                 if Task.isCancelled { return }
                 waited += step
             }
-            // If polish completed cleanly (the common case): STOP —
-            // explicit dismiss only from here (Copy/Delete actions or
-            // X tap). Sean's 0.9.1 call: don't yank the card out from
-            // under the user while they're reading the polished text.
-            // If polish CAPPED OUT (still refining at 6s): the card has
-            // been pinned long enough; do the brief dwell and dismiss
-            // anyway so a stuck WhisperKit pass doesn't pin forever.
-            guard self.refining else { return }
             try? await Task.sleep(nanoseconds: UInt64(self.savedDwell * 1_000_000_000))
             if Task.isCancelled { return }
             guard self.phase == .saved else { return }
