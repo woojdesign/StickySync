@@ -51,8 +51,20 @@ final class VoiceCaptureController {
     /// Returns the NSWindow for a given sticky id, used to anchor the
     /// recording indicator. Set by AppDelegate.
     var windowForSticky: ((UUID) -> NSWindow?)?
+    /// Soft-delete a sticky — used by the post-polish chip's Copy and
+    /// Delete actions. Set by AppDelegate.
+    var deleteSticky: ((UUID) -> Void)?
+    /// Write a string to the system pasteboard — used by the
+    /// post-polish chip's Copy action. Set by AppDelegate.
+    var copyToPasteboard: ((String) -> Void)?
 
     private let indicator = RecordingIndicator()
+    private let postPolishChip = PostPolishChip()
+    /// Tracks whether the current session was on a freshly-created
+    /// sticky (vs. an append into a pre-existing key sticky). The
+    /// post-polish chip only shows for fresh stickies — for appends
+    /// the user clearly wanted the text where it already lives.
+    private var sessionWasFreshSticky = false
 
     /// Active session state. nil between captures.
     private var activeNoteID: UUID?
@@ -113,12 +125,14 @@ final class VoiceCaptureController {
             let targetID: UUID
             if let keyID = resolveKeyStickyID?() {
                 targetID = keyID
+                sessionWasFreshSticky = false
                 appendToOpenNote?(keyID, separator)
             } else {
                 let note = Note(content: "", colorToken: "1")
                 store.add(note)
                 openNoteWindow?(note, true)
                 targetID = note.id
+                sessionWasFreshSticky = true
             }
             // Surface the indicator anchored to whichever sticky we
             // ended up with so the user sees "I'm listening" even when
@@ -232,7 +246,13 @@ final class VoiceCaptureController {
         // distinguish them in copy.
         indicator.showPolishing()
 
-        Task { [finalizer, replaceTrailingInNote, indicator] in
+        // Capture session metadata locally — by the time the Task
+        // resumes the controller's mutable state may have moved on
+        // (next session started, etc.). The chip and copy actions
+        // both depend on this snapshot, not the live state.
+        let wasFresh = sessionWasFreshSticky
+
+        Task { [finalizer, replaceTrailingInNote, indicator, postPolishChip, windowForSticky, deleteSticky, copyToPasteboard] in
             let polished = await finalizer.finalize(audioURL: audioURL,
                                                     fastPartial: speechFinal)
             await MainActor.run {
@@ -245,6 +265,7 @@ final class VoiceCaptureController {
                 // WhisperKitFinalizer is the only finalizer that
                 // populates lastOutcome; for SpeechFinalizer (iOS fast
                 // path) the cast just fails and we hide silently.
+                var polishSucceeded = false
                 if let wk = finalizer as? WhisperKitFinalizer {
                     switch wk.lastOutcome {
                     case .noAudio:
@@ -257,9 +278,27 @@ final class VoiceCaptureController {
                         indicator.showFailed(detail: "no speech detected")
                     case .polished, .identicalToSFSpeech, .notRunYet:
                         indicator.hide()
+                        polishSucceeded = true
                     }
                 } else {
                     indicator.hide()
+                    polishSucceeded = true
+                }
+
+                // Post-polish chip: fresh-voice-stickies only, and
+                // only on successful polish (don't offer to Copy
+                // garbage if Whisper errored).
+                let finalText = polished != speechFinal ? polished : speechFinal
+                if wasFresh, polishSucceeded, !finalText.isEmpty,
+                   let anchorWin = windowForSticky?(id) {
+                    postPolishChip.onCopy = { text in
+                        copyToPasteboard?(text)
+                        deleteSticky?(id)
+                    }
+                    postPolishChip.onDelete = {
+                        deleteSticky?(id)
+                    }
+                    postPolishChip.show(over: anchorWin, polished: finalText)
                 }
             }
         }

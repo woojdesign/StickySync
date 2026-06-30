@@ -109,6 +109,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voice.windowForSticky = { [weak self] id in
             self?.controllers[id]?.window
         }
+        voice.deleteSticky = { [weak self] id in
+            guard let self else { return }
+            self.store.softDelete(id: id)
+            self.controllers[id]?.close()
+            self.controllers[id] = nil
+            self.refreshLists()
+        }
+        voice.copyToPasteboard = { text in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
         voice.start()
         self.voiceCapture = voice
         // React to the user changing their hotkey choice in the menu.
