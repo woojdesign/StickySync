@@ -18,6 +18,8 @@
 // recording past the user's intent.
 
 import AppKit
+import Carbon.HIToolbox   // for kVK_Function = 63
+import OSLog
 
 final class FnHotkeySource: HotkeySource {
 
@@ -34,15 +36,30 @@ final class FnHotkeySource: HotkeySource {
         // delivers no events. Better than crashing or surprising
         // the user with an unsolicited permission dialog.
         guard monitor == nil else { return }
-        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+        // Listen for keyUp too — some keyboards/macOS versions emit
+        // the Fn release as a keyUp with keyCode 63 rather than a
+        // flagsChanged transition. Sean's 0.8.7 report: hold-to-
+        // start worked but release didn't stop, suggests the
+        // flagsChanged for Fn-up wasn't arriving on his MBA.
+        // Diagnostic os_log on every event so the next test paste
+        // reveals exactly what arrives.
+        monitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.flagsChanged, .keyDown, .keyUp]
+        ) { [weak self] event in
             guard let self else { return }
+            SyncLog.voice.info("fn: event type=\(event.type.rawValue, privacy: .public) keyCode=\(event.keyCode, privacy: .public) modifiers=\(event.modifierFlags.rawValue, privacy: .public)")
             for emit in self.detector.handle(event) {
                 switch emit {
-                case .keyDown: self.onKeyDown?()
-                case .keyUp:   self.onKeyUp?()
+                case .keyDown:
+                    SyncLog.voice.info("fn: → keyDown")
+                    self.onKeyDown?()
+                case .keyUp:
+                    SyncLog.voice.info("fn: → keyUp")
+                    self.onKeyUp?()
                 }
             }
         }
+        SyncLog.voice.info("fn: monitor installed (accessibility \(AXIsProcessTrusted() ? "granted" : "NOT granted", privacy: .public))")
     }
 
     func stop() {
@@ -123,6 +140,21 @@ struct FnHoldDetector {
             if fnHeld && !alreadyStopped {
                 alreadyStopped = true
                 return [.keyUp]
+            }
+            return []
+        case .keyUp:
+            // Backup path for Fn release: some keyboards/macOS
+            // versions emit a .keyUp with keyCode 63 (kVK_Function)
+            // instead of a clean .flagsChanged transition. Sean's
+            // 0.8.7 report: hold worked but release didn't stop,
+            // strongly suggests the .flagsChanged for Fn-up isn't
+            // arriving on his MBA. Treat keyCode 63 keyUp the same
+            // as a Fn-up flagsChanged.
+            if event.keyCode == 63 && fnHeld {
+                fnHeld = false
+                let emit: [Emit] = alreadyStopped ? [] : [.keyUp]
+                alreadyStopped = false
+                return emit
             }
             return []
         default:

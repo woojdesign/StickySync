@@ -20,6 +20,12 @@ import AppKit
 private struct FakeEvent {
     let type: NSEvent.EventType
     let modifierFlags: NSEvent.ModifierFlags
+    let keyCode: UInt16
+    init(type: NSEvent.EventType, modifierFlags: NSEvent.ModifierFlags, keyCode: UInt16 = 0) {
+        self.type = type
+        self.modifierFlags = modifierFlags
+        self.keyCode = keyCode
+    }
 }
 
 /// Mirror of FnHoldDetector tuned to take a FakeEvent — logic
@@ -50,6 +56,14 @@ private struct DetectorMirror {
             if fnHeld && !alreadyStopped {
                 alreadyStopped = true
                 return [.keyUp]
+            }
+            return []
+        case .keyUp:
+            if event.keyCode == 63 && fnHeld {
+                fnHeld = false
+                let emit: [Emit] = alreadyStopped ? [] : [.keyUp]
+                alreadyStopped = false
+                return emit
             }
             return []
         default: return []
@@ -109,6 +123,27 @@ final class FnTapDetectorTests: XCTestCase {
                        [.keyDown])
         XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
                        [.keyUp])
+    }
+
+    /// Backup path (0.8.8): some keyboards emit Fn release as a
+    /// .keyUp with keyCode 63 instead of a clean .flagsChanged
+    /// transition. Detector treats that the same as a Fn-up.
+    func testFnUp_ViaKeyCode63_StopsRecording() {
+        var det = DetectorMirror()
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])),
+                       [.keyDown])
+        XCTAssertEqual(det.handle(FakeEvent(type: .keyUp, modifierFlags: [], keyCode: 63)),
+                       [.keyUp],
+                       "Fn release via .keyUp keyCode=63 must stop the recording (backup path for keyboards that don't emit flagsChanged on Fn-up)")
+    }
+
+    /// keyUp for a NON-Fn key during Fn-held → silent. Pollution is
+    /// only detected on keyDown, not keyUp.
+    func testKeyUp_NonFn_Silent() {
+        var det = DetectorMirror()
+        _ = det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function]))
+        XCTAssertEqual(det.handle(FakeEvent(type: .keyUp, modifierFlags: [.function], keyCode: 5)),
+                       [])
     }
 
     /// Spurious flagsChanged events that don't transition Fn state
