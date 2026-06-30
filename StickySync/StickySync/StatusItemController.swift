@@ -191,6 +191,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(arrangeGrid)
 
         menu.addItem(.separator())
+        menu.addItem(voiceHotkeySubmenu())
         menu.addItem(themeSubmenu())
         let whatsNew = NSMenuItem(title: "What’s new in StickySync",
                                   action: #selector(showWhatsNew),
@@ -266,6 +267,44 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// the active one. Picking flips `ThemeStore.shared`, which posts
     /// `.themeChanged` so open note windows + the menu's own swatches
     /// repaint on the next open.
+    /// Hotkey picker for the voice-capture trigger. Two presets:
+    ///   - ⌥V (default) — Carbon chord, no system permission.
+    ///   - Fn — NSEvent-based, requires Accessibility permission.
+    ///     System prompts on first select; subsequent selects toggle
+    ///     without the dialog.
+    private func voiceHotkeySubmenu() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Voice Capture Hotkey", action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: "Voice Capture Hotkey")
+        let current = VoiceCaptureSettings.hotkeyMode
+        let chord = NSMenuItem(title: "⌥V",
+                               action: #selector(pickHotkeyChord),
+                               keyEquivalent: "")
+        chord.target = self
+        chord.state = (current == .chord) ? .on : .off
+        sub.addItem(chord)
+        let fn = NSMenuItem(title: "Fn  (requires Accessibility permission)",
+                            action: #selector(pickHotkeyFn),
+                            keyEquivalent: "")
+        fn.target = self
+        fn.state = (current == .fn) ? .on : .off
+        sub.addItem(fn)
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func pickHotkeyChord() {
+        VoiceCaptureSettings.hotkeyMode = .chord
+    }
+
+    @objc private func pickHotkeyFn() {
+        // Prompt for Accessibility (no-op if already trusted). The
+        // global NSEvent monitor needs this to receive events outside
+        // the app. The user can also flip the toggle in System
+        // Settings → Privacy & Security → Accessibility manually.
+        _ = FnHotkeySource.requestAccessibilityPermission()
+        VoiceCaptureSettings.hotkeyMode = .fn
+    }
+
     private func themeSubmenu() -> NSMenuItem {
         let parent = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
         let sub = NSMenu(title: "Theme")

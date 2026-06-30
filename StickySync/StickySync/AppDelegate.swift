@@ -111,6 +111,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         voice.start()
         self.voiceCapture = voice
+        // React to the user changing their hotkey choice in the menu.
+        NotificationCenter.default.addObserver(
+            forName: .voiceHotkeyModeDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.voiceCapture?.reloadHotkeyMode()
+        }
 
         // Start the local AI-access HTTP server if the user enabled it
         // last session. Failure is non-fatal (e.g. port conflict) — we

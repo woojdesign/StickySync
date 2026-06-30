@@ -78,8 +78,18 @@ final class VoiceCaptureController {
     }
 
 
-    func start() { hotkey.register() }
+    func start() {
+        hotkey.setMode(VoiceCaptureSettings.hotkeyMode)
+        hotkey.register()
+    }
     func stop()  { hotkey.unregister() }
+
+    /// Re-configure the hotkey to whatever mode the user just picked.
+    /// AppDelegate calls this on the .voiceHotkeyModeDidChange
+    /// notification.
+    func reloadHotkeyMode() {
+        hotkey.setMode(VoiceCaptureSettings.hotkeyMode)
+    }
 
     // MARK: - Hotkey handling
 
