@@ -26,48 +26,62 @@ final class FnHotkeySource: HotkeySource {
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
 
-    private var monitor: Any?
+    /// `NSEvent.addGlobalMonitorForEvents` only fires for events
+    /// delivered to OTHER apps. When the user is focused on a
+    /// sticky (StickySync's own window), events go to that text
+    /// view and never hit the global monitor — Fn wouldn't trigger
+    /// (Sean's 0.8.8 log: events arrived cleanly when outside the
+    /// app, were invisible when inside a sticky). Need a local
+    /// monitor in parallel for the in-app path.
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var detector = FnHoldDetector()
 
     func start() {
         // The accessibility prompt is a one-time system dialog. We
         // request without forcing it here (caller decides when to
         // prompt); if not granted, the global monitor silently
-        // delivers no events. Better than crashing or surprising
-        // the user with an unsolicited permission dialog.
-        guard monitor == nil else { return }
-        // Listen for keyUp too — some keyboards/macOS versions emit
-        // the Fn release as a keyUp with keyCode 63 rather than a
-        // flagsChanged transition. Sean's 0.8.7 report: hold-to-
-        // start worked but release didn't stop, suggests the
-        // flagsChanged for Fn-up wasn't arriving on his MBA.
-        // Diagnostic os_log on every event so the next test paste
-        // reveals exactly what arrives.
-        monitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.flagsChanged, .keyDown, .keyUp]
-        ) { [weak self] event in
-            guard let self else { return }
-            SyncLog.voice.info("fn: event type=\(event.type.rawValue, privacy: .public) keyCode=\(event.keyCode, privacy: .public) modifiers=\(event.modifierFlags.rawValue, privacy: .public)")
-            for emit in self.detector.handle(event) {
-                switch emit {
-                case .keyDown:
-                    SyncLog.voice.info("fn: → keyDown")
-                    self.onKeyDown?()
-                case .keyUp:
-                    SyncLog.voice.info("fn: → keyUp")
-                    self.onKeyUp?()
-                }
-            }
+        // delivers no events. The local monitor doesn't need
+        // accessibility — it's events delivered to our own app.
+        guard globalMonitor == nil else { return }
+        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.processEvent(event, scope: "global")
         }
-        SyncLog.voice.info("fn: monitor installed (accessibility \(AXIsProcessTrusted() ? "granted" : "NOT granted", privacy: .public))")
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.processEvent(event, scope: "local")
+            // Pass through so the user's normal typing isn't
+            // consumed — the only thing we react to is Fn alone,
+            // which doesn't insert anything anyway.
+            return event
+        }
+        SyncLog.voice.info("fn: monitors installed (accessibility \(AXIsProcessTrusted() ? "granted" : "NOT granted", privacy: .public))")
     }
 
     func stop() {
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-            self.monitor = nil
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+            self.globalMonitor = nil
+        }
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
         }
         detector.reset()
+    }
+
+    private func processEvent(_ event: NSEvent, scope: String) {
+        SyncLog.voice.info("fn[\(scope, privacy: .public)]: event type=\(event.type.rawValue, privacy: .public) keyCode=\(event.keyCode, privacy: .public) modifiers=\(event.modifierFlags.rawValue, privacy: .public)")
+        for emit in detector.handle(event) {
+            switch emit {
+            case .keyDown:
+                SyncLog.voice.info("fn: → keyDown")
+                onKeyDown?()
+            case .keyUp:
+                SyncLog.voice.info("fn: → keyUp")
+                onKeyUp?()
+            }
+        }
     }
 
     /// Request Accessibility permission with the standard system
