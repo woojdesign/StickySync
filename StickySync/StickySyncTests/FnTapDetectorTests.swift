@@ -1,105 +1,123 @@
 // FnTapDetectorTests.swift
 //
 // Pins the Fn-alone vs Fn+other-key discrimination inside
-// FnHotkeySource. The wrapper class binds NSEvent which can't be
-// constructed under XCTest in a clean way; the detector is pure
-// and consumes any NSEvent, so we test it with fabricated events
-// (built via NSEvent's internal initializers — best-effort).
-//
-// Note: NSEvent can't be reliably constructed from scratch in a
-// unit-test context, so we use a thin adapter that swaps an
+// FnHoldDetector. NSEvent can't be reliably constructed from
+// scratch under XCTest, so we use a thin adapter that swaps an
 // NSEvent-flavored input for the bits the detector actually reads
-// (event type + modifierFlags). The detector is tested via that
-// adapter; the live NSEvent path is exercised in real use.
+// (event type + modifierFlags).
+//
+// 0.8.7 semantics: detector returns an *array* of Emit values per
+// event — usually empty, sometimes one (keyDown or keyUp). The
+// hold-to-talk gesture means Fn-down emits .keyDown, Fn-up emits
+// .keyUp, and a polluting non-Fn keypress emits an early .keyUp
+// (canceling the recording).
 
 import XCTest
 import AppKit
 @testable import StickySync
 
-/// Lightweight stand-in for NSEvent that exposes the same surface
-/// the detector reads. Lets us test without conjuring NSEvent.
+/// Lightweight stand-in for NSEvent.
 private struct FakeEvent {
     let type: NSEvent.EventType
     let modifierFlags: NSEvent.ModifierFlags
 }
 
-/// Mirror of FnTapDetector tuned to take a FakeEvent. The logic is
-/// duplicated verbatim so the test target doesn't need to teach
-/// FnTapDetector about a protocol just for tests. The real
-/// detector's behavior is verified end-to-end in production; this
-/// test pins the decision logic.
+/// Mirror of FnHoldDetector tuned to take a FakeEvent — logic
+/// duplicated verbatim so the test target doesn't need a protocol
+/// just for tests.
 private struct DetectorMirror {
-    typealias Result = FnTapDetector.Result
+    typealias Emit = FnHoldDetector.Emit
     private var fnHeld = false
-    private var otherKeyDuringFn = false
-    mutating func handle(_ event: FakeEvent) -> Result {
+    private var alreadyStopped = false
+
+    mutating func handle(_ event: FakeEvent) -> [Emit] {
         switch event.type {
         case .flagsChanged:
             let fnNowSet = event.modifierFlags.contains(.function)
             if fnNowSet && !fnHeld {
-                fnHeld = true; otherKeyDuringFn = false
-                return .none
+                fnHeld = true
+                alreadyStopped = false
+                return [.keyDown]
             }
             if !fnNowSet && fnHeld {
-                let wasCleanTap = !otherKeyDuringFn
-                fnHeld = false; otherKeyDuringFn = false
-                return wasCleanTap ? .fnTap : .none
+                fnHeld = false
+                let emit: [Emit] = alreadyStopped ? [] : [.keyUp]
+                alreadyStopped = false
+                return emit
             }
-            return .none
+            return []
         case .keyDown:
-            if fnHeld { otherKeyDuringFn = true }
-            return .none
-        default: return .none
+            if fnHeld && !alreadyStopped {
+                alreadyStopped = true
+                return [.keyUp]
+            }
+            return []
+        default: return []
         }
     }
 }
 
 final class FnTapDetectorTests: XCTestCase {
 
-    /// Fn down then Fn up with no other key → fires a clean tap.
-    func testFnAlone_FiresTap() {
+    /// Clean Fn-down → Fn-up → emits [keyDown] then [keyUp].
+    func testFnAlone_EmitsDownThenUp() {
         var det = DetectorMirror()
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])), .none)
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])), .fnTap,
-                       "Fn-up after Fn-down with nothing in between must fire the toggle")
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])),
+                       [.keyDown])
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
+                       [.keyUp])
     }
 
-    /// Fn + other key (e.g. Fn+brightness) → silent. The other key's
-    /// presence pollutes the Fn-down window, so Fn-up doesn't tap.
-    func testFnWithOtherKey_DoesNotFire() {
+    /// Fn + other key → emits [keyDown] on Fn-down, then [keyUp]
+    /// on the other-key press (early stop). The actual Fn-up is
+    /// silent because we already stopped.
+    func testFnWithOtherKey_EmitsEarlyUp() {
         var det = DetectorMirror()
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])),
+                       [.keyDown])
+        XCTAssertEqual(det.handle(FakeEvent(type: .keyDown,      modifierFlags: [.function])),
+                       [.keyUp],
+                       "non-Fn key during Fn-held must cancel — emit .keyUp now to stop the recording")
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
+                       [],
+                       "actual Fn-up must be silent — we already stopped on the polluting keypress")
+    }
+
+    /// Two consecutive clean Fn cycles → two down/up pairs.
+    func testFnAlone_TwoCycles() {
+        var det = DetectorMirror()
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])),
+                       [.keyDown])
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
+                       [.keyUp])
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])),
+                       [.keyDown])
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
+                       [.keyUp])
+    }
+
+    /// After a polluted cycle, the next Fn press is treated as a
+    /// fresh, clean session — pollution flag resets.
+    func testPollutedCycle_ThenCleanCycle_Works() {
+        var det = DetectorMirror()
+        // Polluted: Fn down, other key, Fn up
         _ = det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function]))
         _ = det.handle(FakeEvent(type: .keyDown,      modifierFlags: [.function]))
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])), .none,
-                       "Fn+key combos must not fire — would trigger on every brightness adjustment")
+        _ = det.handle(FakeEvent(type: .flagsChanged, modifierFlags: []))
+        // Clean: Fn down → Fn up
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function])),
+                       [.keyDown])
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
+                       [.keyUp])
     }
 
-    /// Two consecutive Fn taps → two toggles (start, stop pattern).
-    func testFnAlone_TwoTaps_FiresTwice() {
-        var det = DetectorMirror()
-        _ = det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function]))
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])), .fnTap)
-        _ = det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function]))
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])), .fnTap)
-    }
-
-    /// Fn down → other key → key release → Fn release: still
-    /// polluted. Once a key fires during the Fn window, the whole
-    /// session is silent.
-    func testFnWithOtherKey_KeyReleaseDoesntRescue() {
-        var det = DetectorMirror()
-        _ = det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.function]))
-        _ = det.handle(FakeEvent(type: .keyDown,      modifierFlags: [.function]))
-        // (no keyUp tracked — only keyDown matters for pollution)
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])), .none)
-    }
-
-    /// Spurious flagsChanged with no Fn transition → silent.
-    /// (User pressed shift or some other modifier; Fn state didn't
-    /// change.)
+    /// Spurious flagsChanged events that don't transition Fn state
+    /// (e.g. the user pressing shift) are silent.
     func testNonFnFlagsChange_Silent() {
         var det = DetectorMirror()
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.shift])), .none)
-        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])), .none)
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [.shift])),
+                       [])
+        XCTAssertEqual(det.handle(FakeEvent(type: .flagsChanged, modifierFlags: [])),
+                       [])
     }
 }

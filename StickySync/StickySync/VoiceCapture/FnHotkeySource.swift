@@ -6,15 +6,16 @@
 // support Fn (the modifier mask doesn't include it), so this is the
 // only way to bind Fn as a hotkey.
 //
-// **Fn-alone detection** — Apple's own Dictation uses a Fn-tap
-// shortcut, and we copy the pattern: a Fn-down followed by a Fn-up
-// with NO other key pressed in between counts as a "Fn tap" and
-// fires the toggle. Fn pressed alongside another key (Fn+brightness,
-// Fn+arrow, etc.) is silent. Otherwise pressing brightness up would
-// accidentally toggle voice capture.
+// **Gesture: hold-to-talk.** Press Fn → onKeyDown. Release Fn →
+// onKeyUp. The HotkeyController in `.fn` mode maps these directly to
+// .started / .stopped so the recording lifecycle follows the key.
 //
-// State machine pure helper `FnTapDetector` is testable without
-// NSEvent; the wrapper class plumbs real events into it.
+// **Fn-alone vs Fn+other-key.** Any non-Fn key pressed during a
+// Fn-down window pollutes the session: we fire onKeyUp immediately
+// (canceling the recording in progress) and suppress the actual
+// Fn-up emit. Without this, pressing Fn+brightness during a
+// recording would adjust brightness AND incorrectly continue the
+// recording past the user's intent.
 
 import AppKit
 
@@ -24,7 +25,7 @@ final class FnHotkeySource: HotkeySource {
     var onKeyUp: (() -> Void)?
 
     private var monitor: Any?
-    private var detector = FnTapDetector()
+    private var detector = FnHoldDetector()
 
     func start() {
         // The accessibility prompt is a one-time system dialog. We
@@ -35,10 +36,11 @@ final class FnHotkeySource: HotkeySource {
         guard monitor == nil else { return }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
             guard let self else { return }
-            let result = self.detector.handle(event)
-            switch result {
-            case .fnTap:    self.onKeyDown?()   // each tap toggles
-            case .none:     break
+            for emit in self.detector.handle(event) {
+                switch emit {
+                case .keyDown: self.onKeyDown?()
+                case .keyUp:   self.onKeyUp?()
+                }
             }
         }
     }
@@ -64,53 +66,67 @@ final class FnHotkeySource: HotkeySource {
     deinit { stop() }
 }
 
-/// Pure state machine for "Fn pressed alone" vs "Fn pressed with
-/// another key" — testable without NSEvent.
+/// Pure state machine for Fn hold-to-talk gesture with pollution
+/// detection — testable without NSEvent.
 ///
-/// The intent is to fire ONLY on a clean Fn-tap (down + up with no
-/// other key in between). Fn used as a modifier alongside something
-/// else (Fn+brightness, Fn+arrow, etc.) is silent.
-struct FnTapDetector {
-    enum Result { case none, fnTap }
+/// Emits a sequence of "down" / "up" events per Fn press cycle:
+///   - clean Fn-down → Fn-up:  [.keyDown, .keyUp]
+///   - Fn-down → other key → Fn-up:  [.keyDown, .keyUp] (the second
+///     fires on the other-key press, canceling the recording mid-
+///     flight). The actual Fn-up is silent because we already
+///     stopped.
+///   - Spurious flags changes (other modifiers transitioning, etc.)
+///     are no-ops.
+struct FnHoldDetector {
+    enum Emit { case keyDown, keyUp }
 
-    /// Track whether we're inside a Fn-down window. Reset on Fn-up.
+    /// Track whether Fn is currently pressed (per our state, not
+    /// necessarily the OS state — we may have already emitted .keyUp
+    /// due to pollution while the user is still physically holding).
     private var fnHeld = false
-    /// Was a non-Fn key pressed during the current Fn-down? If yes,
-    /// don't fire the tap on Fn-up.
-    private var otherKeyDuringFn = false
+    /// Track whether we've already emitted .keyUp for the current
+    /// Fn-down window (pollution path). Suppresses the duplicate
+    /// .keyUp on the actual Fn-up.
+    private var alreadyStopped = false
 
     mutating func reset() {
         fnHeld = false
-        otherKeyDuringFn = false
+        alreadyStopped = false
     }
 
-    /// Feed an NSEvent. Returns whether the event completes a clean
-    /// Fn-tap (in which case the caller should fire the toggle).
-    mutating func handle(_ event: NSEvent) -> Result {
+    /// Feed an NSEvent. Returns the sequence of emissions (often
+    /// empty, occasionally one or two) the wrapper should forward to
+    /// the caller.
+    mutating func handle(_ event: NSEvent) -> [Emit] {
         switch event.type {
         case .flagsChanged:
             let fnNowSet = event.modifierFlags.contains(.function)
             if fnNowSet && !fnHeld {
-                // Fn-down transition.
+                // Fn-down transition. Hold-to-talk starts here.
                 fnHeld = true
-                otherKeyDuringFn = false
-                return .none
+                alreadyStopped = false
+                return [.keyDown]
             }
             if !fnNowSet && fnHeld {
-                // Fn-up transition.
-                let wasCleanTap = !otherKeyDuringFn
+                // Fn-up transition. Emit .keyUp unless we already
+                // emitted it on a polluted .keyDown event.
                 fnHeld = false
-                otherKeyDuringFn = false
-                return wasCleanTap ? .fnTap : .none
+                let emit: [Emit] = alreadyStopped ? [] : [.keyUp]
+                alreadyStopped = false
+                return emit
             }
-            return .none
+            return []
         case .keyDown:
-            // A regular key fired. If we're inside a Fn-down window,
-            // mark it as polluted so the eventual Fn-up doesn't tap.
-            if fnHeld { otherKeyDuringFn = true }
-            return .none
+            // A non-Fn key fired. If we're inside a Fn-down window,
+            // cancel the recording — emit .keyUp now, suppress the
+            // duplicate on the actual Fn-up.
+            if fnHeld && !alreadyStopped {
+                alreadyStopped = true
+                return [.keyUp]
+            }
+            return []
         default:
-            return .none
+            return []
         }
     }
 }
