@@ -153,9 +153,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openWindow(for note: Note, focus: Bool) {
         let controller = NoteWindowController(note: note, store: store)
-        controller.onRequestClose = { [weak self] id in self?.hideNote(id) }
+        controller.onRequestClose = { [weak self] id in self?.handleRequestClose(id) }
         controllers[note.id] = controller
         controller.show(focus: focus)
+    }
+
+    /// User clicked ✕. Whitespace-only content → soft-delete (no use
+    /// keeping an empty note around; Sean's 0.8.10 call). Otherwise →
+    /// hide, the normal device-local close behavior.
+    private func handleRequestClose(_ id: UUID) {
+        let content = controllers[id]?.note.content ?? store.note(id: id)?.content ?? ""
+        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            store.softDelete(id: id)
+            controllers[id]?.close()
+            controllers[id] = nil
+            refreshLists()
+        } else {
+            hideNote(id)
+        }
     }
 
     /// Close = hide on THIS device (device-local). The note still exists and
