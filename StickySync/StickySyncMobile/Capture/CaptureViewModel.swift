@@ -106,6 +106,37 @@ final class CaptureViewModel: ObservableObject {
         #endif
     }
 
+    // MARK: - Post-polish actions (0.9.1)
+
+    /// Copy the saved transcript to the system pasteboard and delete
+    /// the underlying note. Mirrors Mac's PostPolishChip "Copy" —
+    /// the user wanted the text somewhere else, the sticky was just
+    /// a way to get it there.
+    func copyAndDelete() {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = savedText
+        #endif
+        deleteSaved()
+    }
+
+    /// Delete the saved note without copying. The capture is
+    /// discarded entirely.
+    func deleteSaved() {
+        if let note = lastNote { writer.softDelete(note) }
+        lastNote = nil
+        dismissNow()
+    }
+
+    /// Explicit dismiss (X tap) — keep the note, just close the
+    /// SavedView. Used as the "no, I'm keeping it, get out of my
+    /// way" affordance now that the post-polish state pauses
+    /// auto-dismiss.
+    func dismissNow() {
+        dismissTask?.cancel()
+        reset()
+        withAnimation(WoojMotion.calm.animation) { phase = .idle }
+    }
+
     // MARK: - Lifecycle
 
     private func begin() async {
@@ -185,8 +216,11 @@ final class CaptureViewModel: ObservableObject {
         dismissTask = Task { @MainActor [weak self] in
             guard let self else { return }
             // Hold the saved card while the second pass runs, capped so a cold
-            // model download can't pin it open; then a brief dwell to read the
-            // polished text, then dismiss.
+            // model download can't pin it open. Once polish completes, we
+            // now PAUSE here — the user gets the Copy/Delete affordance and
+            // explicitly dismisses (Copy/Delete action or X tap). The auto-
+            // dismiss after polish was Sean's call to remove in 0.9.1 so the
+            // post-polish chip on iOS doesn't vanish before the user reads it.
             let cap = 6.0, step = 0.1
             var waited = 0.0
             while self.refining && waited < cap {
@@ -194,6 +228,14 @@ final class CaptureViewModel: ObservableObject {
                 if Task.isCancelled { return }
                 waited += step
             }
+            // If polish completed cleanly (the common case): STOP —
+            // explicit dismiss only from here (Copy/Delete actions or
+            // X tap). Sean's 0.9.1 call: don't yank the card out from
+            // under the user while they're reading the polished text.
+            // If polish CAPPED OUT (still refining at 6s): the card has
+            // been pinned long enough; do the brief dwell and dismiss
+            // anyway so a stuck WhisperKit pass doesn't pin forever.
+            guard self.refining else { return }
             try? await Task.sleep(nanoseconds: UInt64(self.savedDwell * 1_000_000_000))
             if Task.isCancelled { return }
             guard self.phase == .saved else { return }

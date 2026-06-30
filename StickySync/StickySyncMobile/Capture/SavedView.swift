@@ -12,23 +12,84 @@ struct SavedView: View {
     @State private var landed = false
 
     var body: some View {
-        VStack(spacing: WoojSpace.lg) {
-            sticky
-                .scaleEffect(landed ? 1 : 0.92)
-                .opacity(landed ? 1 : 0)
-                .contentShape(Rectangle())
-                .onTapGesture { vm.recapture() }
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: WoojSpace.lg) {
+                sticky
+                    .scaleEffect(landed ? 1 : 0.92)
+                    .opacity(landed ? 1 : 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture { vm.recapture() }
 
-            paletteDock
-                .opacity(landed ? 1 : 0)
+                paletteDock
+                    .opacity(landed ? 1 : 0)
 
-            hint
-                .opacity(landed ? 1 : 0)
+                // Once polish completes (refining flips false) the
+                // dismiss timer pauses (CaptureViewModel.scheduleDismiss)
+                // and the user gets explicit actions. 0.9.1: mirrors
+                // Mac's PostPolishChip — Copy hands the polished text
+                // to the pasteboard + deletes the sticky; Delete
+                // discards without copying.
+                if !vm.refining && landed {
+                    postPolishActions
+                        .transition(.opacity)
+                } else {
+                    hint
+                        .opacity(landed ? 1 : 0)
+                }
+            }
+            .padding(.horizontal, WoojSpace.xl)
+
+            // Explicit dismiss-without-action (X) — needed because the
+            // post-polish state pauses auto-dismiss. Top-right corner so
+            // it's discoverable without competing with the sticky.
+            if !vm.refining && landed {
+                Button { vm.dismissNow() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(WoojColor.muted)
+                        .padding(14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Done")
+                .transition(.opacity)
+            }
         }
-        .padding(.horizontal, WoojSpace.xl)
+        .animation(WoojMotion.calm.animation, value: vm.refining)
         .onAppear {
             withAnimation(WoojMotion.settle.animation) { landed = true }
         }
+    }
+
+    private var postPolishActions: some View {
+        HStack(spacing: WoojSpace.md) {
+            actionButton(title: "Copy",
+                         symbol: "doc.on.doc",
+                         tint: WoojColor.clay) { vm.copyAndDelete() }
+            actionButton(title: "Delete",
+                         symbol: "trash",
+                         tint: WoojColor.muted) { vm.deleteSaved() }
+        }
+    }
+
+    private func actionButton(title: String,
+                              symbol: String,
+                              tint: Color,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: WoojSpace.xs) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(title)
+                    .woojStyle(WoojType.label)
+            }
+            .foregroundColor(tint)
+            .padding(.horizontal, WoojSpace.lg)
+            .padding(.vertical, WoojSpace.sm)
+            .background(WoojColor.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(WoojColor.line))
+        }
+        .buttonStyle(.plain)
     }
 
     /// Color picker shown beneath the saved sticky. The dock isn't part of

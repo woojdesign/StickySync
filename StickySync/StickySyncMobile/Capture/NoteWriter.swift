@@ -42,4 +42,11 @@ final class NoteWriter {
         updated.colorToken = colorToken
         store.update(updated)
     }
+
+    /// Soft-deletes the note. Used by post-polish "Copy & Delete"
+    /// (transcript goes to clipboard, sticky is discarded) and the
+    /// standalone "Delete" affordance on SavedView.
+    func softDelete(_ note: Note) {
+        store.softDelete(id: note.id)
+    }
 }
