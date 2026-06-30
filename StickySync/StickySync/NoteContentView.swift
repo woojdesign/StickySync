@@ -16,48 +16,43 @@ final class HeaderView: NSView {
     }
 }
 
-/// The rounded, colored body of a note. **Chrome redesign A** (branch):
-/// no top header. Native traffic-light close lives in a transparent
-/// title bar via the NSWindow style mask (handled in
-/// `NoteWindowController`). Per-sticky controls live in a hover-
-/// revealed strip along the **bottom** edge:
-///
-///   ●  ●  ●  ⦿  ●  ●  ●   ·   ⇪   Aa
-///   ↑                          ↑    ↑
-///   seven palette colors,      share font
-///   tap a color to switch      menu  popover
-///   (one-tap, no popover)
+/// The rounded, colored body of a note. **Chrome redesign A** (revised
+/// after dev feedback):
+///   - Custom **✕** top-right, hover-revealed, color-adapted to stay
+///     visible against any sticky color (avoiding the native traffic
+///     light's red-on-red invisibility on red stickies).
+///   - **Bottom hover-revealed strip** with [color · share · font]
+///     icons. Color icon opens a popover with the 7 swatches — no
+///     more raw color dots on the sticky (visual collision with the
+///     close button + invisibility of the selected dot against the
+///     same-colored background).
 final class NoteContentView: NSView {
-    /// Bottom hover strip height. Slim so it doesn't compete with
+    /// Bottom hover strip height. Slim enough not to compete with
     /// content when revealed.
-    let bottomStripHeight: CGFloat = 30
-    /// Inset at top so the native traffic lights don't cover the
-    /// first line of text. NSWindow's standard title bar is ~28pt
-    /// on macOS Tahoe.
-    let titleBarInset: CGFloat = 28
+    let bottomStripHeight: CGFloat = 28
+    /// Top hover-revealed close button area. Just a hit zone for
+    /// the ✕; no full header bar.
+    let topCloseAreaHeight: CGFloat = 22
 
     private(set) var colorToken: String = Palette.defaultToken
 
-    /// Bottom hover-revealed strip container.
+    /// Hover-revealed bottom strip container.
     let bottomStrip = NSView()
-    /// Seven color buttons (one per palette slot), populated in
-    /// `setup()` and ring-highlighted to show the current color.
-    private(set) var colorButtons: [NSButton] = []
+    let colorButton = NSButton()
     let shareButton = NSButton()
     let fontButton = NSButton()
+    /// Close button lives outside the bottom strip — top-right of the
+    /// sticky — so it stays in a familiar position even when the
+    /// other chrome moves to the bottom.
+    let closeButton = NSButton()
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
     let markdownStorage: MarkdownTextStorage
-    /// Custom resize handle in the bottom-right corner — larger and
-    /// more reliable than the borderless-window default. Reset in
-    /// `layout()`. See `ResizeGripView` at the bottom of this file.
+    /// Custom resize handle in the bottom-right corner.
     var resizeGrip: ResizeGripView!
 
-    var onPickColor: ((String) -> Void)?
-    var onFont: (() -> Void)?
-    /// Retained for popover-based fallback flows (theme menus etc.)
-    /// even though the bottom strip doesn't fire it directly.
     var onColor: (() -> Void)?
+    var onFont: (() -> Void)?
     var onClose: (() -> Void)?
     var onToggleCollapse: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
@@ -105,22 +100,11 @@ final class NoteContentView: NSView {
 
     private func setup() {
         // --- Bottom hover strip ---
-        // Slim colored band along the bottom holding the per-sticky
-        // controls. Hover-revealed only — at rest the sticky is just
-        // its content. Layout: seven color buttons (left/center), a
-        // separator dot, then share + font icons (right).
-        for slot in 1...7 {
-            let token = String(slot)
-            let b = NSButton(title: "", target: self, action: #selector(colorButtonTapped(_:)))
-            b.isBordered = false
-            b.bezelStyle = .regularSquare
-            b.setButtonType(.momentaryChange)
-            b.imagePosition = .imageOnly
-            b.identifier = NSUserInterfaceItemIdentifier(rawValue: token)
-            b.toolTip = "Color \(slot)"
-            bottomStrip.addSubview(b)
-            colorButtons.append(b)
-        }
+        // Three icons: color (opens popover with swatches), share,
+        // font. Hover-revealed only.
+        configureIconButton(colorButton, symbol: "paintpalette",
+                            tip: "Change color", action: #selector(colorTapped))
+        bottomStrip.addSubview(colorButton)
 
         configureIconButton(shareButton, symbol: "square.and.arrow.up",
                             tip: "Share note", action: #selector(shareTapped))
@@ -137,7 +121,17 @@ final class NoteContentView: NSView {
 
         addSubview(bottomStrip)
 
-        // --- Scroll + text view (unchanged) ---
+        // --- Close button (top-right) ---
+        // Lives outside the bottom strip so the close stays in a
+        // familiar position even with the chrome rebalanced. The
+        // color-adapting tint (`apply` below) keeps the ✕ readable
+        // against any sticky color — Apple's red traffic light
+        // disappeared on red stickies.
+        configureIconButton(closeButton, symbol: "xmark",
+                            tip: "Close note", action: #selector(closeTapped))
+        addSubview(closeButton)
+
+        // --- Scroll + text view ---
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -165,10 +159,7 @@ final class NoteContentView: NSView {
         setChromeVisible(false, animated: false)
     }
 
-    @objc private func colorButtonTapped(_ sender: NSButton) {
-        guard let token = sender.identifier?.rawValue else { return }
-        onPickColor?(token)
-    }
+    @objc private func colorTapped() { onColor?() }
 
     private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector) {
         b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
@@ -181,7 +172,6 @@ final class NoteContentView: NSView {
         b.toolTip = tip
     }
 
-    @objc private func colorTapped() { onColor?() }
     @objc private func fontTapped() { onFont?() }
     @objc private func closeTapped() { onClose?() }
 
@@ -260,39 +250,13 @@ final class NoteContentView: NSView {
         textView.typingAttributes = [.foregroundColor: textColor, .font: font]
 
         let tint = textColor.withAlphaComponent(0.85)
+        colorButton.contentTintColor = tint
         shareButton.contentTintColor = tint
+        closeButton.contentTintColor = tint
         fontButton.attributedTitle = NSAttributedString(string: "Aa", attributes: [
             .foregroundColor: tint,
             .font: NSFont.systemFont(ofSize: 14, weight: .medium)
         ])
-        // Refresh the color buttons' images so the current-slot ring
-        // resolves against the new appearance.
-        refreshColorButtonImages()
-    }
-
-    /// Draws each palette swatch as a small filled circle. The
-    /// current color gets a thin outline ring so it's visually
-    /// distinct without a separate selection chrome layer.
-    private func refreshColorButtonImages() {
-        let dotSize: CGFloat = 14
-        for b in colorButtons {
-            guard let token = b.identifier?.rawValue else { continue }
-            let isCurrent = (token == colorToken)
-            let fill = Appearance.background(for: token)
-            let img = NSImage(size: NSSize(width: dotSize, height: dotSize),
-                              flipped: false) { rect in
-                fill.setFill()
-                NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).fill()
-                if isCurrent {
-                    NSColor.labelColor.withAlphaComponent(0.6).setStroke()
-                    let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
-                    ring.lineWidth = 1.5
-                    ring.stroke()
-                }
-                return true
-            }
-            b.image = img
-        }
     }
 
     func setChromeVisible(_ visible: Bool, animated: Bool) {
@@ -301,9 +265,11 @@ final class NoteContentView: NSView {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
                 bottomStrip.animator().alphaValue = alpha
+                closeButton.animator().alphaValue = alpha
             }
         } else {
             bottomStrip.alphaValue = alpha
+            closeButton.alphaValue = alpha
         }
     }
 
@@ -328,39 +294,34 @@ final class NoteContentView: NSView {
         super.layout()
         let b = bounds
 
-        // Bottom strip lives along the bottom edge.
+        // Top-right close: floats in the corner; no header bar.
+        let closeSize: CGFloat = 16
+        let closePad: CGFloat = 8
+        closeButton.frame = NSRect(x: b.width - closePad - closeSize,
+                                   y: b.height - closePad - closeSize,
+                                   width: closeSize, height: closeSize)
+
+        // Bottom hover strip along the bottom edge: [color] [share] [font]
+        // left-aligned with consistent spacing.
         bottomStrip.frame = NSRect(x: 0, y: 0, width: b.width, height: bottomStripHeight)
-
-        // Layout inside the strip:
-        //   [7 color dots, left-aligned with consistent gap]
-        //   [flexible spacer]
-        //   [share icon] [font icon]
-        let dotSize: CGFloat = 14
-        let dotGap: CGFloat = 6
-        let edgePad: CGFloat = 10
         let iconSize: CGFloat = 16
-        let cy = (bottomStripHeight - dotSize) / 2
         let iconCy = (bottomStripHeight - iconSize) / 2
+        let edgePad: CGFloat = 10
+        let iconGap: CGFloat = 12
 
-        var x = edgePad
-        for b in colorButtons {
-            b.frame = NSRect(x: x, y: cy, width: dotSize, height: dotSize)
-            x += dotSize + dotGap
-        }
-
-        let fontW: CGFloat = 24
-        let rightEdge = bounds.width - edgePad
-        fontButton.frame = NSRect(x: rightEdge - fontW, y: iconCy,
-                                  width: fontW, height: iconSize)
-        shareButton.frame = NSRect(x: rightEdge - fontW - 8 - iconSize, y: iconCy,
+        colorButton.frame = NSRect(x: edgePad, y: iconCy,
                                    width: iconSize, height: iconSize)
+        shareButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: iconCy,
+                                   width: iconSize, height: iconSize)
+        let fontW: CGFloat = 24
+        fontButton.frame = NSRect(x: edgePad + iconSize + iconGap + iconSize + iconGap,
+                                  y: iconCy, width: fontW, height: iconSize)
 
-        // ScrollView fills the window minus the title-bar inset at top
-        // and the bottom strip's height. With `.fullSizeContentView`
-        // the content view extends behind the title bar, so leaving
-        // titleBarInset at the top keeps text out from under the
-        // traffic lights.
-        let contentHeight = max(0, b.height - titleBarInset - bottomStripHeight)
+        // ScrollView fills the area between top close-zone and bottom
+        // strip. A small top inset so the first line of text doesn't
+        // sit directly behind the close button.
+        let topInset: CGFloat = topCloseAreaHeight
+        let contentHeight = max(0, b.height - topInset - bottomStripHeight)
         scrollView.frame = NSRect(x: 0, y: bottomStripHeight,
                                   width: b.width, height: contentHeight)
         // Do NOT set textContainer.containerSize here. textView has
