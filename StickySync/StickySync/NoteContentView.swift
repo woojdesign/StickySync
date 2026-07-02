@@ -133,7 +133,11 @@ final class NoteContentView: NSView {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.allowsUndo = true
-        textView.textContainerInset = NSSize(width: 12, height: 4)
+        // 0.9.5: matching 12pt inset on all four sides. Prior height
+        // of 4 made the top feel tight now that the chrome overlays
+        // (0.9.4) instead of reserving a 26pt gap. Sean: "matching
+        // the left, right, and bottom margins on the top as well."
+        textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
