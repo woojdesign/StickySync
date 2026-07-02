@@ -1,6 +1,18 @@
 import AppKit
 import NotesKit
 
+private extension NSColor {
+    /// Rec. 601 luminance < 0.5. Used by the header band to pick
+    /// black-vs-white overlay based on the sticky's text color.
+    var isDark: Bool {
+        guard let rgb = usingColorSpace(.sRGB) else { return true }
+        let l = 0.299 * rgb.redComponent
+              + 0.587 * rgb.greenComponent
+              + 0.114 * rgb.blueComponent
+        return l < 0.5
+    }
+}
+
 /// The title-bar strip. Drags the window on a single click, rolls the note up
 /// on a double-click. Because the chrome buttons are subviews that handle
 /// their own clicks, this only fires on the empty title area.
@@ -261,11 +273,14 @@ final class NoteContentView: NSView {
             .font: NSFont.systemFont(ofSize: 14, weight: .medium)
         ])
 
-        // Header band: dark overlay on light stickies (dark text),
-        // light overlay on dark stickies (light text). The overlay
-        // color matches the text color's family so the band looks
-        // like a deepening/lightening of the sticky's own body.
-        header.layer?.backgroundColor = textColor.withAlphaComponent(0.06).cgColor
+        // Header band: OPPOSITE the text/chrome color so the band
+        // contrasts the chrome, not blends with it. Dark text (light
+        // sticky) → white band (lightens). Light text (dark sticky)
+        // → black band (darkens). Sean 0.9.7 → 0.9.8: "if the text
+        // and chrome is black, we should lighten the band; if it's
+        // white, we should darken."
+        let bandColor: NSColor = textColor.isDark ? .white : .black
+        header.layer?.backgroundColor = bandColor.withAlphaComponent(0.08).cgColor
     }
 
     func setChromeVisible(_ visible: Bool, animated: Bool) {
