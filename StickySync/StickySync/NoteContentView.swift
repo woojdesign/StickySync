@@ -251,17 +251,21 @@ final class NoteContentView: NSView {
         ])
     }
 
-    /// 0.9.4: chrome is always visible now. The hover-reveal caused
-    /// the "wasted empty space above the first line of text when
-    /// hidden" issue Sean flagged. Always-on chrome (with the tinted
-    /// icons) reads as sticky identity, not clutter — matches the
-    /// Claude-icon-bar reference Sean pointed at.
-    ///
-    /// Kept as a no-op with the same signature so upstream hover
-    /// wiring doesn't need churn.
     func setChromeVisible(_ visible: Bool, animated: Bool) {
-        for b in [colorButton, shareButton, fontButton, closeButton] {
-            b.alphaValue = 1
+        let alpha: CGFloat = visible ? 1 : 0
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.12
+                colorButton.animator().alphaValue = alpha
+                shareButton.animator().alphaValue = alpha
+                fontButton.animator().alphaValue = alpha
+                closeButton.animator().alphaValue = alpha
+            }
+        } else {
+            colorButton.alphaValue = alpha
+            shareButton.alphaValue = alpha
+            fontButton.alphaValue = alpha
+            closeButton.alphaValue = alpha
         }
     }
 
@@ -314,9 +318,15 @@ final class NoteContentView: NSView {
         colorButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW - iconGap - iconSize, y: cy,
                                    width: iconSize, height: iconSize)
 
-        scrollView.frame = NSRect(x: 0, y: 0,
-                                  width: b.width,
-                                  height: max(0, b.height - headerHeight))
+        // Overlay: scrollView takes the FULL sticky height and the
+        // header floats over it. Hover-hidden = text edge-to-edge, no
+        // wasted 26pt gap. Hover-shown = icons appear over the top of
+        // whatever content is there. Sean: "chrome should NOT always
+        // be visible — the problem is that the gap below the top of
+        // the margin and text is too large when the chrome is not
+        // visible." (Overlays are cheap; the header's alpha-hidden
+        // buttons don't draw when invisible.)
+        scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: b.height)
         // Do NOT set textContainer.containerSize here. textView has
         // `widthTracksTextView = true`, which makes the container width
         // follow the textView's content area (i.e. width minus
