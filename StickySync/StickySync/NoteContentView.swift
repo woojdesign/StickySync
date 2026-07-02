@@ -100,13 +100,12 @@ final class NoteContentView: NSView {
         // Double-click drags to collapse; single-click drags the
         // window (`HeaderView.mouseDown`).
         //
-        // 0.9.6: subtle darker band behind the chrome — mirrors OG
-        // Apple Stickies' title-bar treatment. A 6% black overlay
-        // universally darkens (light stickies get a clear band; dark
-        // stickies get a subtle deepening). The band lives on the
-        // header itself so it fades in/out with the icons.
+        // 0.9.7: contextual band — dark overlay on light stickies,
+        // light overlay on dark stickies. The color is applied in
+        // `apply(colorToken:font:)` based on the resolved text color
+        // (dark text → dark band, light text → light band). Kept
+        // subtle (6% alpha) — mirrors OG Apple Stickies' title bar.
         header.wantsLayer = true
-        header.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.06).cgColor
         header.onDoubleClick = { [weak self] in self?.onToggleCollapse?() }
         addSubview(header)
 
@@ -261,6 +260,12 @@ final class NoteContentView: NSView {
             .foregroundColor: tint,
             .font: NSFont.systemFont(ofSize: 14, weight: .medium)
         ])
+
+        // Header band: dark overlay on light stickies (dark text),
+        // light overlay on dark stickies (light text). The overlay
+        // color matches the text color's family so the band looks
+        // like a deepening/lightening of the sticky's own body.
+        header.layer?.backgroundColor = textColor.withAlphaComponent(0.06).cgColor
     }
 
     func setChromeVisible(_ visible: Bool, animated: Bool) {
