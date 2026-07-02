@@ -46,20 +46,21 @@ final class NoteContentViewZOrderTests: XCTestCase {
     /// A click inside the header's frame should hit-test to a chrome
     /// button (or the header itself, for drag), NEVER through to the
     /// text view.
-    func testHitTest_InHeaderFrame_LandsOnChrome() {
+    ///
+    /// Contract only applies when chrome is VISIBLE — when hidden
+    /// the header intentionally lets clicks fall through so the
+    /// user can place their cursor at the top of text.
+    func testHitTest_InHeaderFrame_VisibleChrome_LandsOnChrome() {
         let view = NoteContentView(frame: NSRect(x: 0, y: 0, width: 300, height: 300))
         view.layoutSubtreeIfNeeded()
+        view.setChromeVisible(true, animated: false)
 
-        // Point in the middle of the header's y-range, near the left
-        // where colorButton lives.
         let headerCenterY = view.bounds.height - (view.headerHeight / 2)
         let point = NSPoint(x: 18, y: headerCenterY)
         let hit = view.hitTest(point)
 
-        // Must NOT be the text view or scroll view.
         XCTAssertFalse(hit is NSTextView,
-            "chrome hit-test escaped into the text view — z-order broken")
-        // Should be one of: header, or a button descended from header.
+            "visible-chrome hit-test escaped into the text view — z-order broken")
         var walker: NSView? = hit
         var foundHeaderAncestry = false
         while let w = walker {
@@ -67,6 +68,29 @@ final class NoteContentViewZOrderTests: XCTestCase {
             walker = w.superview
         }
         XCTAssertTrue(foundHeaderAncestry,
-            "hit-test in header region should land in the header subtree")
+            "visible-chrome hit-test in header region should land in the header subtree")
+    }
+
+    /// 0.10.1: when the chrome is hover-HIDDEN (alpha 0), a click in
+    /// the header's frame should FALL THROUGH to whatever's below
+    /// (scrollView / text view). Sean: "it's now hard to click on
+    /// text that's near the top" — this test guards the fix.
+    func testHitTest_InHeaderFrame_HiddenChrome_FallsThrough() {
+        let view = NoteContentView(frame: NSRect(x: 0, y: 0, width: 300, height: 300))
+        view.layoutSubtreeIfNeeded()
+        view.setChromeVisible(false, animated: false)
+
+        let headerCenterY = view.bounds.height - (view.headerHeight / 2)
+        let point = NSPoint(x: 18, y: headerCenterY)
+        let hit = view.hitTest(point)
+
+        // Whatever the hit resolves to, it must NOT be inside the
+        // header subtree — click should have passed through.
+        var walker: NSView? = hit
+        while let w = walker {
+            XCTAssertFalse(w === view.header,
+                "hidden-chrome hit-test should NOT resolve into the header")
+            walker = w.superview
+        }
     }
 }

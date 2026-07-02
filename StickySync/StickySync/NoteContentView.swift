@@ -26,6 +26,19 @@ final class HeaderView: NSView {
             window?.performDrag(with: event)
         }
     }
+
+    /// 0.10.1: when the chrome is hover-hidden (alphaValue == 0),
+    /// return nil so clicks fall THROUGH the invisible header into
+    /// the scrollView / text view underneath. Sean: "it's now hard
+    /// to click on text that's near the top" — the header's 26pt
+    /// frame was silently eating cursor placement.
+    ///
+    /// When even partially visible (during the fade in/out
+    /// animation), defer to super so buttons + drag still work.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if alphaValue == 0 { return nil }
+        return super.hitTest(point)
+    }
 }
 
 /// The rounded, colored body of a note. **Chrome redesign A** (final):
