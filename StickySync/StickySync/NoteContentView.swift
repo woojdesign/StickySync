@@ -99,6 +99,14 @@ final class NoteContentView: NSView {
         // Slim bar hosting all per-sticky icons. Hover-revealed.
         // Double-click drags to collapse; single-click drags the
         // window (`HeaderView.mouseDown`).
+        //
+        // 0.9.6: subtle darker band behind the chrome — mirrors OG
+        // Apple Stickies' title-bar treatment. A 6% black overlay
+        // universally darkens (light stickies get a clear band; dark
+        // stickies get a subtle deepening). The band lives on the
+        // header itself so it fades in/out with the icons.
+        header.wantsLayer = true
+        header.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.06).cgColor
         header.onDoubleClick = { [weak self] in self?.onToggleCollapse?() }
         addSubview(header)
 
@@ -260,16 +268,10 @@ final class NoteContentView: NSView {
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
-                colorButton.animator().alphaValue = alpha
-                shareButton.animator().alphaValue = alpha
-                fontButton.animator().alphaValue = alpha
-                closeButton.animator().alphaValue = alpha
+                header.animator().alphaValue = alpha
             }
         } else {
-            colorButton.alphaValue = alpha
-            shareButton.alphaValue = alpha
-            fontButton.alphaValue = alpha
-            closeButton.alphaValue = alpha
+            header.alphaValue = alpha
         }
     }
 
