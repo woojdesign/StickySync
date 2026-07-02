@@ -293,33 +293,40 @@ final class NoteContentView: NSView {
         header.frame = NSRect(x: 0, y: b.height - headerHeight,
                               width: b.width, height: headerHeight)
 
-        // Header layout: appearance controls left ([color, font]);
-        // actions right ([share, close]). Sean's dev call: font next
-        // to close in the original didn't make sense — it belongs
-        // with color as an "appearance" pair.
-        //
-        // Spacing carried over from the branch experiments: 10pt
-        // edges, 12pt gaps — icons breathe without feeling cramped.
+        // Header layout (0.9.4): close ISOLATED top-left (macOS
+        // convention, familiar location); action icons grouped on the
+        // right. The big gap between close and the actions is
+        // deliberate — Sean: "having an icon close to the close
+        // button is an antipattern." Same-side grouping of
+        // color/font/share also leaves room to slot a future
+        // 3-dot overflow at the right end without re-thinking the
+        // layout.
         let iconSize: CGFloat = 16
         let edgePad: CGFloat = 10
         let iconGap: CGFloat = 12
         let cy = (headerHeight - iconSize) / 2
         let fontW: CGFloat = 24
 
-        colorButton.frame = NSRect(x: edgePad, y: cy,
+        closeButton.frame = NSRect(x: edgePad, y: cy,
                                    width: iconSize, height: iconSize)
-        fontButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: cy,
-                                  width: fontW, height: iconSize)
 
         let rightEdge = header.bounds.width - edgePad
-        closeButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
+        shareButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
                                    width: iconSize, height: iconSize)
-        shareButton.frame = NSRect(x: rightEdge - iconSize - iconGap - iconSize, y: cy,
+        fontButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW, y: cy,
+                                  width: fontW, height: iconSize)
+        colorButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW - iconGap - iconSize, y: cy,
                                    width: iconSize, height: iconSize)
 
-        scrollView.frame = NSRect(x: 0, y: 0,
-                                  width: b.width,
-                                  height: max(0, b.height - headerHeight))
+        // Overlay: scrollView takes the FULL sticky height and the
+        // header floats over it. Hover-hidden = text edge-to-edge, no
+        // wasted 26pt gap. Hover-shown = icons appear over the top of
+        // whatever content is there. Sean: "chrome should NOT always
+        // be visible — the problem is that the gap below the top of
+        // the margin and text is too large when the chrome is not
+        // visible." (Overlays are cheap; the header's alpha-hidden
+        // buttons don't draw when invisible.)
+        scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: b.height)
         // Do NOT set textContainer.containerSize here. textView has
         // `widthTracksTextView = true`, which makes the container width
         // follow the textView's content area (i.e. width minus
