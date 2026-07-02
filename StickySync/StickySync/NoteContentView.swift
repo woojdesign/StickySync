@@ -279,8 +279,14 @@ final class NoteContentView: NSView {
         // → black band (darkens). Sean 0.9.7 → 0.9.8: "if the text
         // and chrome is black, we should lighten the band; if it's
         // white, we should darken."
-        let bandColor: NSColor = textColor.isDark ? .white : .black
-        header.layer?.backgroundColor = bandColor.withAlphaComponent(0.08).cgColor
+        // Split alphas: white-on-light needs more juice to register
+        // than black-on-dark (Sean 0.9.9: "at least double strength
+        // for contrast"). Human vision perceives black overlays as
+        // ~2× stronger than white overlays at the same alpha.
+        let (bandColor, bandAlpha): (NSColor, CGFloat) = textColor.isDark
+            ? (.white, 0.16)
+            : (.black, 0.08)
+        header.layer?.backgroundColor = bandColor.withAlphaComponent(bandAlpha).cgColor
     }
 
     func setChromeVisible(_ visible: Bool, animated: Bool) {
