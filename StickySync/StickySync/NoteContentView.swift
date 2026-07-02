@@ -16,34 +16,30 @@ final class HeaderView: NSView {
     }
 }
 
-/// The rounded, colored body of a note. **Chrome redesign A** (revised
-/// after dev feedback):
-///   - Custom **✕** top-right, hover-revealed, color-adapted to stay
-///     visible against any sticky color (avoiding the native traffic
-///     light's red-on-red invisibility on red stickies).
-///   - **Bottom hover-revealed strip** with [color · share · font]
-///     icons. Color icon opens a popover with the 7 swatches — no
-///     more raw color dots on the sticky (visual collision with the
-///     close button + invisibility of the selected dot against the
-///     same-colored background).
+/// The rounded, colored body of a note. **Chrome redesign A** (final):
+/// after exploring bottom-strip variants + native traffic lights, we
+/// landed back at the original **top header** layout — but with more
+/// generous spacing than the old cramped 18pt bar.
+///   - Header at top, `headerHeight = 26` (up from 18 — no longer
+///     feels squeezed against the window edge).
+///   - Icons: [🎨 color, ⇪ share] on the left; [Aa font, ✕ close] on
+///     the right. 12pt gap between icons (up from 6pt).
+///   - Color still opens a popover with the 7 swatches. ✕ close is
+///     custom + color-adapted so it stays visible on every sticky
+///     color.
+///   - Hover-revealed as before.
 final class NoteContentView: NSView {
-    /// Bottom hover strip height. Slim enough not to compete with
-    /// content when revealed.
-    let bottomStripHeight: CGFloat = 28
-    /// Top hover-revealed close button area. Just a hit zone for
-    /// the ✕; no full header bar.
-    let topCloseAreaHeight: CGFloat = 22
+    /// Top header height. Slim enough to feel like a title bar, but
+    /// with real breathing room so icons aren't pressed against the
+    /// top edge of the sticky.
+    let headerHeight: CGFloat = 26
 
     private(set) var colorToken: String = Palette.defaultToken
 
-    /// Hover-revealed bottom strip container.
-    let bottomStrip = NSView()
+    let header = HeaderView()
     let colorButton = NSButton()
     let shareButton = NSButton()
     let fontButton = NSButton()
-    /// Close button lives outside the bottom strip — top-right of the
-    /// sticky — so it stays in a familiar position even when the
-    /// other chrome moves to the bottom.
     let closeButton = NSButton()
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
@@ -99,16 +95,20 @@ final class NoteContentView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private func setup() {
-        // --- Bottom hover strip ---
-        // Three icons: color (opens popover with swatches), share,
-        // font. Hover-revealed only.
+        // --- Top header ---
+        // Slim bar hosting all per-sticky icons. Hover-revealed.
+        // Double-click drags to collapse; single-click drags the
+        // window (`HeaderView.mouseDown`).
+        header.onDoubleClick = { [weak self] in self?.onToggleCollapse?() }
+        addSubview(header)
+
         configureIconButton(colorButton, symbol: "paintpalette",
                             tip: "Change color", action: #selector(colorTapped))
-        bottomStrip.addSubview(colorButton)
+        header.addSubview(colorButton)
 
         configureIconButton(shareButton, symbol: "square.and.arrow.up",
                             tip: "Share note", action: #selector(shareTapped))
-        bottomStrip.addSubview(shareButton)
+        header.addSubview(shareButton)
 
         fontButton.title = "Aa"
         fontButton.isBordered = false
@@ -117,19 +117,11 @@ final class NoteContentView: NSView {
         fontButton.target = self
         fontButton.action = #selector(fontTapped)
         fontButton.toolTip = "Change font"
-        bottomStrip.addSubview(fontButton)
+        header.addSubview(fontButton)
 
-        addSubview(bottomStrip)
-
-        // --- Close button (top-right) ---
-        // Lives outside the bottom strip so the close stays in a
-        // familiar position even with the chrome rebalanced. The
-        // color-adapting tint (`apply` below) keeps the ✕ readable
-        // against any sticky color — Apple's red traffic light
-        // disappeared on red stickies.
         configureIconButton(closeButton, symbol: "xmark",
                             tip: "Close note", action: #selector(closeTapped))
-        addSubview(closeButton)
+        header.addSubview(closeButton)
 
         // --- Scroll + text view ---
         scrollView.drawsBackground = false
@@ -264,11 +256,15 @@ final class NoteContentView: NSView {
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
-                bottomStrip.animator().alphaValue = alpha
+                colorButton.animator().alphaValue = alpha
+                shareButton.animator().alphaValue = alpha
+                fontButton.animator().alphaValue = alpha
                 closeButton.animator().alphaValue = alpha
             }
         } else {
-            bottomStrip.alphaValue = alpha
+            colorButton.alphaValue = alpha
+            shareButton.alphaValue = alpha
+            fontButton.alphaValue = alpha
             closeButton.alphaValue = alpha
         }
     }
@@ -294,36 +290,33 @@ final class NoteContentView: NSView {
         super.layout()
         let b = bounds
 
-        // Top-right close: floats in the corner; no header bar.
-        let closeSize: CGFloat = 16
-        let closePad: CGFloat = 8
-        closeButton.frame = NSRect(x: b.width - closePad - closeSize,
-                                   y: b.height - closePad - closeSize,
-                                   width: closeSize, height: closeSize)
+        header.frame = NSRect(x: 0, y: b.height - headerHeight,
+                              width: b.width, height: headerHeight)
 
-        // Bottom hover strip along the bottom edge: [color] [share] [font]
-        // left-aligned with consistent spacing.
-        bottomStrip.frame = NSRect(x: 0, y: 0, width: b.width, height: bottomStripHeight)
+        // Header layout: [color, share] left-aligned; [font, close]
+        // right-aligned. More generous edge padding (10) and gap (12)
+        // than the original 7/6 — the chrome now breathes without
+        // feeling cramped against the sticky's edge.
         let iconSize: CGFloat = 16
-        let iconCy = (bottomStripHeight - iconSize) / 2
         let edgePad: CGFloat = 10
         let iconGap: CGFloat = 12
-
-        colorButton.frame = NSRect(x: edgePad, y: iconCy,
-                                   width: iconSize, height: iconSize)
-        shareButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: iconCy,
-                                   width: iconSize, height: iconSize)
+        let cy = (headerHeight - iconSize) / 2
         let fontW: CGFloat = 24
-        fontButton.frame = NSRect(x: edgePad + iconSize + iconGap + iconSize + iconGap,
-                                  y: iconCy, width: fontW, height: iconSize)
 
-        // ScrollView fills the area between top close-zone and bottom
-        // strip. A small top inset so the first line of text doesn't
-        // sit directly behind the close button.
-        let topInset: CGFloat = topCloseAreaHeight
-        let contentHeight = max(0, b.height - topInset - bottomStripHeight)
-        scrollView.frame = NSRect(x: 0, y: bottomStripHeight,
-                                  width: b.width, height: contentHeight)
+        colorButton.frame = NSRect(x: edgePad, y: cy,
+                                   width: iconSize, height: iconSize)
+        shareButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: cy,
+                                   width: iconSize, height: iconSize)
+
+        let rightEdge = header.bounds.width - edgePad
+        closeButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
+                                   width: iconSize, height: iconSize)
+        fontButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW, y: cy,
+                                  width: fontW, height: iconSize)
+
+        scrollView.frame = NSRect(x: 0, y: 0,
+                                  width: b.width,
+                                  height: max(0, b.height - headerHeight))
         // Do NOT set textContainer.containerSize here. textView has
         // `widthTracksTextView = true`, which makes the container width
         // follow the textView's content area (i.e. width minus

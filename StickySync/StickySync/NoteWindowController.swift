@@ -56,7 +56,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.level = .normal
-        window.minSize = NSSize(width: 170, height: 60)
+        window.minSize = NSSize(width: 170, height: 26)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
@@ -607,10 +607,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
         note.collapsed = collapsed
         var frame = window.frame
-        // Collapsed = top close area + bottom strip, with a small
-        // amount of content in between. Replaces the old top-header
-        // collapsedHeight.
-        let collapsedHeight = noteView.topCloseAreaHeight + noteView.bottomStripHeight
+        let collapsedHeight = noteView.headerHeight
 
         if collapsed {
             expandedHeight = frame.height
