@@ -119,7 +119,12 @@ final class NoteContentView: NSView {
         // subtle (6% alpha) — mirrors OG Apple Stickies' title bar.
         header.wantsLayer = true
         header.onDoubleClick = { [weak self] in self?.onToggleCollapse?() }
-        addSubview(header)
+        // NOTE: header is added AFTER scrollView (see below) so it
+        // sits above the text view in z-order. Since 0.9.4 the
+        // scrollView takes the full sticky height and would otherwise
+        // eat clicks in the header area — every chrome tap would land
+        // in the text view as a cursor move instead of hitting the
+        // buttons.
 
         configureIconButton(colorButton, symbol: "paintpalette",
                             tip: "Change color", action: #selector(colorTapped))
@@ -164,7 +169,15 @@ final class NoteContentView: NSView {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         scrollView.documentView = textView
+
+        // Z-order (bottom → top): scrollView (content), header
+        // (chrome overlay), resizeGrip (grip). Header MUST be added
+        // AFTER scrollView so its buttons receive clicks — the
+        // scrollView covers the header's frame area since 0.9.4 and
+        // would otherwise route every chrome tap into a cursor move
+        // in the text view.
         addSubview(scrollView)
+        addSubview(header)
 
         // A wide, reliable resize grip in the bottom-right.
         resizeGrip = ResizeGripView(frame: .zero)
