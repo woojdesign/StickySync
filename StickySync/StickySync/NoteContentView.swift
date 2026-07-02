@@ -251,21 +251,17 @@ final class NoteContentView: NSView {
         ])
     }
 
+    /// 0.9.4: chrome is always visible now. The hover-reveal caused
+    /// the "wasted empty space above the first line of text when
+    /// hidden" issue Sean flagged. Always-on chrome (with the tinted
+    /// icons) reads as sticky identity, not clutter — matches the
+    /// Claude-icon-bar reference Sean pointed at.
+    ///
+    /// Kept as a no-op with the same signature so upstream hover
+    /// wiring doesn't need churn.
     func setChromeVisible(_ visible: Bool, animated: Bool) {
-        let alpha: CGFloat = visible ? 1 : 0
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.12
-                colorButton.animator().alphaValue = alpha
-                shareButton.animator().alphaValue = alpha
-                fontButton.animator().alphaValue = alpha
-                closeButton.animator().alphaValue = alpha
-            }
-        } else {
-            colorButton.alphaValue = alpha
-            shareButton.alphaValue = alpha
-            fontButton.alphaValue = alpha
-            closeButton.alphaValue = alpha
+        for b in [colorButton, shareButton, fontButton, closeButton] {
+            b.alphaValue = 1
         }
     }
 
@@ -293,28 +289,29 @@ final class NoteContentView: NSView {
         header.frame = NSRect(x: 0, y: b.height - headerHeight,
                               width: b.width, height: headerHeight)
 
-        // Header layout: appearance controls left ([color, font]);
-        // actions right ([share, close]). Sean's dev call: font next
-        // to close in the original didn't make sense — it belongs
-        // with color as an "appearance" pair.
-        //
-        // Spacing carried over from the branch experiments: 10pt
-        // edges, 12pt gaps — icons breathe without feeling cramped.
+        // Header layout (0.9.4): close ISOLATED top-left (macOS
+        // convention, familiar location); action icons grouped on the
+        // right. The big gap between close and the actions is
+        // deliberate — Sean: "having an icon close to the close
+        // button is an antipattern." Same-side grouping of
+        // color/font/share also leaves room to slot a future
+        // 3-dot overflow at the right end without re-thinking the
+        // layout.
         let iconSize: CGFloat = 16
         let edgePad: CGFloat = 10
         let iconGap: CGFloat = 12
         let cy = (headerHeight - iconSize) / 2
         let fontW: CGFloat = 24
 
-        colorButton.frame = NSRect(x: edgePad, y: cy,
+        closeButton.frame = NSRect(x: edgePad, y: cy,
                                    width: iconSize, height: iconSize)
-        fontButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: cy,
-                                  width: fontW, height: iconSize)
 
         let rightEdge = header.bounds.width - edgePad
-        closeButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
+        shareButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
                                    width: iconSize, height: iconSize)
-        shareButton.frame = NSRect(x: rightEdge - iconSize - iconGap - iconSize, y: cy,
+        fontButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW, y: cy,
+                                  width: fontW, height: iconSize)
+        colorButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW - iconGap - iconSize, y: cy,
                                    width: iconSize, height: iconSize)
 
         scrollView.frame = NSRect(x: 0, y: 0,
