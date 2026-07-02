@@ -293,10 +293,13 @@ final class NoteContentView: NSView {
         header.frame = NSRect(x: 0, y: b.height - headerHeight,
                               width: b.width, height: headerHeight)
 
-        // Header layout: [color, share] left-aligned; [font, close]
-        // right-aligned. More generous edge padding (10) and gap (12)
-        // than the original 7/6 — the chrome now breathes without
-        // feeling cramped against the sticky's edge.
+        // Header layout: appearance controls left ([color, font]);
+        // actions right ([share, close]). Sean's dev call: font next
+        // to close in the original didn't make sense — it belongs
+        // with color as an "appearance" pair.
+        //
+        // Spacing carried over from the branch experiments: 10pt
+        // edges, 12pt gaps — icons breathe without feeling cramped.
         let iconSize: CGFloat = 16
         let edgePad: CGFloat = 10
         let iconGap: CGFloat = 12
@@ -305,14 +308,14 @@ final class NoteContentView: NSView {
 
         colorButton.frame = NSRect(x: edgePad, y: cy,
                                    width: iconSize, height: iconSize)
-        shareButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: cy,
-                                   width: iconSize, height: iconSize)
+        fontButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: cy,
+                                  width: fontW, height: iconSize)
 
         let rightEdge = header.bounds.width - edgePad
         closeButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
                                    width: iconSize, height: iconSize)
-        fontButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW, y: cy,
-                                  width: fontW, height: iconSize)
+        shareButton.frame = NSRect(x: rightEdge - iconSize - iconGap - iconSize, y: cy,
+                                   width: iconSize, height: iconSize)
 
         scrollView.frame = NSRect(x: 0, y: 0,
                                   width: b.width,
