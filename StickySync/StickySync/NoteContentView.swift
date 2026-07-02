@@ -53,6 +53,11 @@ final class NoteContentView: NSView {
     let shareButton = NSButton()
     let fontButton = NSButton()
     let closeButton = NSButton()
+    /// 0.10.0: overflow menu (⋯) — home for Delete Note and any
+    /// future secondary actions (Duplicate, Show in All Notes,
+    /// etc.). See research writeup: destructive/secondary actions
+    /// belong here, not in the primary chrome cluster.
+    let overflowButton = NSButton()
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
     let markdownStorage: MarkdownTextStorage
@@ -62,6 +67,7 @@ final class NoteContentView: NSView {
     var onColor: (() -> Void)?
     var onFont: (() -> Void)?
     var onClose: (() -> Void)?
+    var onOverflow: (() -> Void)?
     var onToggleCollapse: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
     /// Tap "Share with someone…" — owner-side CKShare creation /
@@ -147,6 +153,10 @@ final class NoteContentView: NSView {
                             tip: "Close note", action: #selector(closeTapped))
         header.addSubview(closeButton)
 
+        configureIconButton(overflowButton, symbol: "ellipsis",
+                            tip: "More", action: #selector(overflowTapped))
+        header.addSubview(overflowButton)
+
         // --- Scroll + text view ---
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -188,6 +198,7 @@ final class NoteContentView: NSView {
     }
 
     @objc private func colorTapped() { onColor?() }
+    @objc private func overflowTapped() { onOverflow?() }
 
     private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector) {
         b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
@@ -281,6 +292,7 @@ final class NoteContentView: NSView {
         colorButton.contentTintColor = tint
         shareButton.contentTintColor = tint
         closeButton.contentTintColor = tint
+        overflowButton.contentTintColor = tint
         fontButton.attributedTitle = NSAttributedString(string: "Aa", attributes: [
             .foregroundColor: tint,
             .font: NSFont.systemFont(ofSize: 14, weight: .medium)
@@ -292,12 +304,13 @@ final class NoteContentView: NSView {
         // → black band (darkens). Sean 0.9.7 → 0.9.8: "if the text
         // and chrome is black, we should lighten the band; if it's
         // white, we should darken."
-        // Split alphas: white-on-light needs more juice to register
-        // than black-on-dark (Sean 0.9.9: "at least double strength
-        // for contrast"). Human vision perceives black overlays as
-        // ~2× stronger than white overlays at the same alpha.
+        // Split alphas: white-on-light needs much more juice than
+        // black-on-dark to register visually. 0.9.9 bumped to 0.16;
+        // 0.10.0 bumps again to 0.32 per Sean's contrast callout
+        // ("double contrast"). Black stays at 0.08 — already reads
+        // cleanly on dark stickies.
         let (bandColor, bandAlpha): (NSColor, CGFloat) = textColor.isDark
-            ? (.white, 0.16)
+            ? (.white, 0.32)
             : (.black, 0.08)
         header.layer?.backgroundColor = bandColor.withAlphaComponent(bandAlpha).cgColor
     }
@@ -355,13 +368,18 @@ final class NoteContentView: NSView {
         closeButton.frame = NSRect(x: edgePad, y: cy,
                                    width: iconSize, height: iconSize)
 
+        // Right cluster, filled right-to-left: overflow ⋯ anchors
+        // the right edge (0.10.0 addition, home for secondary /
+        // destructive actions); then share, font, color walking left.
         let rightEdge = header.bounds.width - edgePad
-        shareButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
-                                   width: iconSize, height: iconSize)
-        fontButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW, y: cy,
-                                  width: fontW, height: iconSize)
-        colorButton.frame = NSRect(x: rightEdge - iconSize - iconGap - fontW - iconGap - iconSize, y: cy,
-                                   width: iconSize, height: iconSize)
+        var x = rightEdge - iconSize
+        overflowButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
+        x -= iconSize + iconGap
+        shareButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
+        x -= fontW + iconGap
+        fontButton.frame = NSRect(x: x, y: cy, width: fontW, height: iconSize)
+        x -= iconSize + iconGap
+        colorButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
 
         // Overlay: scrollView takes the FULL sticky height and the
         // header floats over it. Hover-hidden = text edge-to-edge, no

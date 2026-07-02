@@ -165,8 +165,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openWindow(for note: Note, focus: Bool) {
         let controller = NoteWindowController(note: note, store: store)
         controller.onRequestClose = { [weak self] id in self?.handleRequestClose(id) }
+        controller.onRequestDelete = { [weak self] id in self?.handleRequestDelete(id) }
         controllers[note.id] = controller
         controller.show(focus: focus)
+    }
+
+    /// 0.10.0: user hit ⋯ → Delete Note in the overflow menu. Soft-
+    /// delete + close window + show the Undo toast at the sticky's
+    /// last position. On Undo tap, restore the note (un-set
+    /// deletedAt via update) + reopen the window at the same frame.
+    private var activeUndoToast: UndoToast?
+    private func handleRequestDelete(_ id: UUID) {
+        guard let controller = controllers[id],
+              let liveNote = store.note(id: id) else { return }
+
+        // Capture what we need before tearing down.
+        var restoredNote = liveNote
+        let anchorFrame = controller.window.frame
+
+        // Perform the delete + close.
+        store.softDelete(id: id)
+        controller.close()
+        controllers[id] = nil
+        refreshLists()
+
+        // Show the transient Undo toast. Retained on self so the
+        // auto-hide timer + tap handler stay alive; replaced if
+        // another delete happens.
+        let toast = UndoToast()
+        toast.onUndo = { [weak self] in
+            guard let self else { return }
+            restoredNote.deletedAt = nil
+            restoredNote.modifiedAt = Date()
+            self.store.update(restoredNote)
+            self.refreshLists()
+            self.openWindow(for: restoredNote, focus: true)
+            // Restore the exact position the user had.
+            self.controllers[id]?.window.setFrame(anchorFrame, display: true)
+        }
+        toast.show(anchorFrame: anchorFrame)
+        activeUndoToast = toast
     }
 
     /// User clicked ✕. Whitespace-only content → soft-delete (no use

@@ -13,6 +13,9 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     private let noteView: NoteContentView
 
     var onRequestClose: ((UUID) -> Void)?
+    /// 0.10.0: user hit ⋯ → Delete Note in the overflow menu. Wired
+    /// by AppDelegate to soft-delete + show the Undo toast.
+    var onRequestDelete: ((UUID) -> Void)?
 
     private var expandedHeight: CGFloat
     private var saveWorkItem: DispatchWorkItem?
@@ -93,6 +96,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         noteView.onColor = { [weak self] in self?.showColorPopover() }
         noteView.onFont = { [weak self] in self?.showFontPopover() }
         noteView.onClose = { [weak self] in self?.requestClose() }
+        noteView.onOverflow = { [weak self] in self?.showOverflowMenu() }
         noteView.onToggleCollapse = { [weak self] in self?.toggleCollapse() }
         noteView.onShareWithPeople = { [weak self] in self?.shareWithPeople() }
         noteView.onHoverChange = { [weak self] hovering in
@@ -631,6 +635,43 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     private func requestClose() {
         onRequestClose?(note.id)
+    }
+
+    // MARK: - Overflow menu (⋯)
+
+    /// Shows the small menu anchored to the ⋯ button. 0.10.0 ships
+    /// only Delete Note; Duplicate / Show in All Notes / etc. slot
+    /// in the same menu as they arrive. Destructive items get
+    /// `.destructive` visual treatment via the isAlternate/enabled
+    /// hooks below — AppKit's NSMenu doesn't have a direct
+    /// `role: .destructive` API, so we manually red the title
+    /// attribute for the Delete row.
+    private func showOverflowMenu() {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let delete = NSMenuItem(title: "Delete Note",
+                                action: #selector(deleteFromOverflow),
+                                keyEquivalent: "")
+        delete.target = self
+        // Redden the "Delete Note" title so it reads as destructive
+        // — matches the SwiftUI `.destructive` role and Apple HIG
+        // guidance ("make destructive choices prominent by using
+        // red").
+        delete.attributedTitle = NSAttributedString(
+            string: "Delete Note",
+            attributes: [.foregroundColor: NSColor.systemRed])
+        menu.addItem(delete)
+
+        // Anchor above the ⋯ button so the menu appears near the
+        // point of interaction, not at the mouse cursor.
+        let button = noteView.overflowButton
+        let origin = NSPoint(x: 0, y: button.bounds.maxY)
+        menu.popUp(positioning: nil, at: origin, in: button)
+    }
+
+    @objc private func deleteFromOverflow() {
+        onRequestDelete?(note.id)
     }
 
     // MARK: - Layout persistence
