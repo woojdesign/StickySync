@@ -27,17 +27,28 @@ final class HeaderView: NSView {
         }
     }
 
-    /// 0.10.1: when the chrome is hover-hidden (alphaValue == 0),
-    /// return nil so clicks fall THROUGH the invisible header into
-    /// the scrollView / text view underneath. Sean: "it's now hard
-    /// to click on text that's near the top" — the header's 26pt
-    /// frame was silently eating cursor placement.
+    /// Only claim clicks that land on actual button subviews. Empty
+    /// header space (between/around buttons) passes THROUGH to the
+    /// text view underneath — otherwise the always-hoverable header
+    /// eats cursor placement over the top ~26pt of text.
     ///
-    /// When even partially visible (during the fade in/out
-    /// animation), defer to super so buttons + drag still work.
+    /// 0.10.1 tried "nil when hidden" but that wasn't enough:
+    /// hovering over the top of the sticky reveals the chrome, and
+    /// then the header intercepted empty-space clicks too. 0.10.2:
+    /// header itself never claims a hit — only its buttons do.
+    ///
+    /// Trade: drag-window-by-title-bar via HeaderView.mouseDown no
+    /// longer fires (empty header space falls through). Users drag
+    /// via the sticky's non-scroll region or via the window
+    /// controls (⌘M etc.). If drag from the top becomes missed,
+    /// we'll add an explicit grabber region.
     override func hitTest(_ point: NSPoint) -> NSView? {
         if alphaValue == 0 { return nil }
-        return super.hitTest(point)
+        let hit = super.hitTest(point)
+        // super.hitTest returns a button if one claims the point, or
+        // `self` (the header) if no button does. We only want to
+        // claim button hits — otherwise pass through.
+        return hit === self ? nil : hit
     }
 }
 
