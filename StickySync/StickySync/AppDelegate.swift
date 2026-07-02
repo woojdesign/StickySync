@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controllers: [UUID: NoteWindowController] = [:]
     private var statusItemController: StatusItemController?
     private var listWindowController: NotesListWindowController?
+    private var recentlyDeletedController: RecentlyDeletedWindowController?
     private var mcpServer: MCPServer?
     private var mcpConfigWindow: NSWindow?
     private var voiceCapture: VoiceCaptureController?
@@ -314,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onNewNote = { [weak self] in self?.newNote() }
         controller.onShowNote = { [weak self] id in self?.showNote(id) }
         controller.onShowList = { [weak self] in self?.showList() }
+        controller.onShowRecentlyDeleted = { [weak self] in self?.showRecentlyDeleted() }
         controller.onShowWhatsNew = { [weak self] note in
             guard let self else { return }
             // Make sure the (possibly newly-dropped) sticky has a window
@@ -392,8 +394,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listWindowController?.show()
     }
 
+    /// 0.10.3: open the Recently Deleted window. Wired from the menu
+    /// under File → Recently Deleted…
+    @objc func showRecentlyDeleted() {
+        if recentlyDeletedController == nil {
+            let controller = RecentlyDeletedWindowController(store: store)
+            controller.onRestore = { [weak self] id in self?.restoreDeletedNote(id) }
+            controller.onDeletePermanently = { [weak self] id in
+                self?.permanentlyDeleteNote(id)
+            }
+            controller.onEmptyTrash = { [weak self] in self?.emptyRecentlyDeleted() }
+            recentlyDeletedController = controller
+        }
+        recentlyDeletedController?.show()
+    }
+
+    private func restoreDeletedNote(_ id: UUID) {
+        store.restore(id: id)
+        refreshLists()
+        recentlyDeletedController?.reload()
+        // Reopen the sticky window so the restored note is visible
+        // where the user expects it — same behavior as the 0.10.0
+        // Undo toast.
+        if let note = store.note(id: id) {
+            openWindow(for: note, focus: true)
+        }
+    }
+
+    private func permanentlyDeleteNote(_ id: UUID) {
+        store.hardDelete(id: id)
+        recentlyDeletedController?.reload()
+    }
+
+    private func emptyRecentlyDeleted() {
+        for note in store.deletedNotes() {
+            store.hardDelete(id: note.id)
+        }
+        recentlyDeletedController?.reload()
+    }
+
     private func refreshLists() {
         listWindowController?.reload()
+        recentlyDeletedController?.reload()
         // The status-bar menu rebuilds itself each time it opens, so it needs
         // no explicit refresh here.
     }
@@ -443,6 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fileItem.submenu = fileMenu
         addItem(to: fileMenu, "New Note", #selector(newNote), "n")
         addItem(to: fileMenu, "All Notes…", #selector(showList), "l")
+        addItem(to: fileMenu, "Recently Deleted…", #selector(showRecentlyDeleted), "")
         fileMenu.addItem(.separator())
         addItem(to: fileMenu, "Close Note", #selector(closeKeyNote), "w")
         addItem(to: fileMenu, "Delete Note…", #selector(deleteKeyNote), "")

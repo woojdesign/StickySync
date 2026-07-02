@@ -7,6 +7,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onNewNote: (() -> Void)?
     var onShowNote: ((UUID) -> Void)?
     var onShowList: (() -> Void)?
+    var onShowRecentlyDeleted: (() -> Void)?
     var isNoteOpen: ((UUID) -> Bool)?
     /// Toggle the local MCP server on/off. Wired by AppDelegate.
     var onToggleAIAccess: ((Bool) -> Void)?
@@ -156,6 +157,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let listItem = NSMenuItem(title: "Show All Notes…", action: #selector(showList), keyEquivalent: "")
         listItem.target = self
         menu.addItem(listItem)
+        let recentlyDeletedItem = NSMenuItem(title: "Recently Deleted…",
+                                             action: #selector(showRecentlyDeleted),
+                                             keyEquivalent: "")
+        recentlyDeletedItem.target = self
+        menu.addItem(recentlyDeletedItem)
 
         // Sync line — only present when there's something to say. Silence
         // (the `.harmony` state) is the success signal; showing "Synced"
@@ -402,6 +408,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func newNote() { onNewNote?() }
     @objc private func showList() { onShowList?() }
+    @objc private func showRecentlyDeleted() { onShowRecentlyDeleted?() }
     @objc private func openNote(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
         onShowNote?(id)
