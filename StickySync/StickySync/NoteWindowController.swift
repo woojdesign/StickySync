@@ -40,6 +40,13 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             self.expandedHeight = frame.height
         }
 
+        // Chrome redesign A (revised): back to a borderless window —
+        // Apple's native traffic lights were the wrong call for a
+        // colored sticky (red close vanishes on red sticky; circular
+        // controls visually collide with palette swatches). Custom ✕
+        // top-right is HIG-violating but right for THIS aesthetic, and
+        // the existing tint-adapting logic keeps it visible on every
+        // sticky color.
         window = NoteWindow(contentRect: frame,
                             styleMask: [.borderless, .resizable],
                             backing: .buffered,
@@ -49,7 +56,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.level = .normal
-        window.minSize = NSSize(width: 170, height: 18)
+        window.minSize = NSSize(width: 170, height: 26)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
@@ -552,9 +559,12 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             self.saveNow()
             popover?.performClose(nil)
         }
+        // Anchor to the color button in the bottom strip. The popover
+        // opens upward (`.minY`) so the swatches appear above the
+        // strip, not below the screen edge.
         popover.show(relativeTo: noteView.colorButton.bounds,
                      of: noteView.colorButton,
-                     preferredEdge: .maxY)
+                     preferredEdge: .minY)
     }
 
     private func showFontPopover() {

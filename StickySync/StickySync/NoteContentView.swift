@@ -16,12 +16,23 @@ final class HeaderView: NSView {
     }
 }
 
-/// The rounded, colored body of a note: a title bar with hover-revealed
-/// controls (color, font, close) over a plain-text editor.
+/// The rounded, colored body of a note. **Chrome redesign A** (final):
+/// after exploring bottom-strip variants + native traffic lights, we
+/// landed back at the original **top header** layout — but with more
+/// generous spacing than the old cramped 18pt bar.
+///   - Header at top, `headerHeight = 26` (up from 18 — no longer
+///     feels squeezed against the window edge).
+///   - Icons: [🎨 color, ⇪ share] on the left; [Aa font, ✕ close] on
+///     the right. 12pt gap between icons (up from 6pt).
+///   - Color still opens a popover with the 7 swatches. ✕ close is
+///     custom + color-adapted so it stays visible on every sticky
+///     color.
+///   - Hover-revealed as before.
 final class NoteContentView: NSView {
-    /// Thin top strip holding the hover controls; it's also the drag handle.
-    /// Kept slim so text starts near the top of the note, like Stickies.
-    let headerHeight: CGFloat = 18
+    /// Top header height. Slim enough to feel like a title bar, but
+    /// with real breathing room so icons aren't pressed against the
+    /// top edge of the sticky.
+    let headerHeight: CGFloat = 26
 
     private(set) var colorToken: String = Palette.defaultToken
 
@@ -33,9 +44,7 @@ final class NoteContentView: NSView {
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
     let markdownStorage: MarkdownTextStorage
-    /// Custom resize handle in the bottom-right corner — larger and
-    /// more reliable than the borderless-window default. Reset in
-    /// `layout()`. See `ResizeGripView` at the bottom of this file.
+    /// Custom resize handle in the bottom-right corner.
     var resizeGrip: ResizeGripView!
 
     var onColor: (() -> Void)?
@@ -86,13 +95,19 @@ final class NoteContentView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private func setup() {
+        // --- Top header ---
+        // Slim bar hosting all per-sticky icons. Hover-revealed.
+        // Double-click drags to collapse; single-click drags the
+        // window (`HeaderView.mouseDown`).
         header.onDoubleClick = { [weak self] in self?.onToggleCollapse?() }
         addSubview(header)
 
-        configureIconButton(colorButton, symbol: "paintpalette", tip: "Change color", action: #selector(colorTapped))
+        configureIconButton(colorButton, symbol: "paintpalette",
+                            tip: "Change color", action: #selector(colorTapped))
         header.addSubview(colorButton)
 
-        configureIconButton(shareButton, symbol: "square.and.arrow.up", tip: "Share note", action: #selector(shareTapped))
+        configureIconButton(shareButton, symbol: "square.and.arrow.up",
+                            tip: "Share note", action: #selector(shareTapped))
         header.addSubview(shareButton)
 
         fontButton.title = "Aa"
@@ -104,9 +119,11 @@ final class NoteContentView: NSView {
         fontButton.toolTip = "Change font"
         header.addSubview(fontButton)
 
-        configureIconButton(closeButton, symbol: "xmark", tip: "Close note", action: #selector(closeTapped))
+        configureIconButton(closeButton, symbol: "xmark",
+                            tip: "Close note", action: #selector(closeTapped))
         header.addSubview(closeButton)
 
+        // --- Scroll + text view ---
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -126,16 +143,15 @@ final class NoteContentView: NSView {
         scrollView.documentView = textView
         addSubview(scrollView)
 
-        // A wide, reliable resize grip in the bottom-right. The default
-        // borderless-window resize hit zone is ~8x8 and clicks near the
-        // edge can pass through to whatever's behind. This is a real
-        // tracking area we own.
+        // A wide, reliable resize grip in the bottom-right.
         resizeGrip = ResizeGripView(frame: .zero)
         resizeGrip.translatesAutoresizingMaskIntoConstraints = false
         addSubview(resizeGrip)
 
         setChromeVisible(false, animated: false)
     }
+
+    @objc private func colorTapped() { onColor?() }
 
     private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector) {
         b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
@@ -148,7 +164,6 @@ final class NoteContentView: NSView {
         b.toolTip = tip
     }
 
-    @objc private func colorTapped() { onColor?() }
     @objc private func fontTapped() { onFont?() }
     @objc private func closeTapped() { onClose?() }
 
@@ -274,17 +289,37 @@ final class NoteContentView: NSView {
     override func layout() {
         super.layout()
         let b = bounds
-        header.frame = NSRect(x: 0, y: b.height - headerHeight, width: b.width, height: headerHeight)
 
-        let pad: CGFloat = 7
-        let size: CGFloat = 16
-        let cy = (headerHeight - size) / 2
-        colorButton.frame = NSRect(x: pad, y: cy, width: size, height: size)
-        shareButton.frame = NSRect(x: pad + size + 6, y: cy, width: size, height: size)
-        closeButton.frame = NSRect(x: header.bounds.width - pad - size, y: cy, width: size, height: size)
-        fontButton.frame = NSRect(x: header.bounds.width - pad - size - 6 - 24, y: cy, width: 24, height: size)
+        header.frame = NSRect(x: 0, y: b.height - headerHeight,
+                              width: b.width, height: headerHeight)
 
-        scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: max(0, b.height - headerHeight))
+        // Header layout: appearance controls left ([color, font]);
+        // actions right ([share, close]). Sean's dev call: font next
+        // to close in the original didn't make sense — it belongs
+        // with color as an "appearance" pair.
+        //
+        // Spacing carried over from the branch experiments: 10pt
+        // edges, 12pt gaps — icons breathe without feeling cramped.
+        let iconSize: CGFloat = 16
+        let edgePad: CGFloat = 10
+        let iconGap: CGFloat = 12
+        let cy = (headerHeight - iconSize) / 2
+        let fontW: CGFloat = 24
+
+        colorButton.frame = NSRect(x: edgePad, y: cy,
+                                   width: iconSize, height: iconSize)
+        fontButton.frame = NSRect(x: edgePad + iconSize + iconGap, y: cy,
+                                  width: fontW, height: iconSize)
+
+        let rightEdge = header.bounds.width - edgePad
+        closeButton.frame = NSRect(x: rightEdge - iconSize, y: cy,
+                                   width: iconSize, height: iconSize)
+        shareButton.frame = NSRect(x: rightEdge - iconSize - iconGap - iconSize, y: cy,
+                                   width: iconSize, height: iconSize)
+
+        scrollView.frame = NSRect(x: 0, y: 0,
+                                  width: b.width,
+                                  height: max(0, b.height - headerHeight))
         // Do NOT set textContainer.containerSize here. textView has
         // `widthTracksTextView = true`, which makes the container width
         // follow the textView's content area (i.e. width minus
