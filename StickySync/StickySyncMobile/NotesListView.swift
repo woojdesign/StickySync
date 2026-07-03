@@ -181,6 +181,7 @@ struct NotesListView: View {
             }
             Spacer(minLength: 12)
             HStack(spacing: 8) {
+                overflowMenu
                 listModeToggle
                 themePicker
             }
@@ -188,6 +189,23 @@ struct NotesListView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+
+    /// 0.10.4: ⋯ menu. Home for less-frequent actions that don't
+    /// need permanent header real estate. Currently: Recently
+    /// Deleted. Mirrors the Mac's overflow menu convention (0.10.0).
+    private var overflowMenu: some View {
+        NavigationLink {
+            RecentlyDeletedView().environmentObject(model)
+        } label: {
+            Image(systemName: "trash")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(WoojColor.secondary)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Recently Deleted")
     }
 
     /// Cards ↔ list toggle. SF Symbol button that flips the @AppStorage
