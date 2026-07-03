@@ -202,7 +202,10 @@ final class NoteContentView: NSView {
         // stays alpha-1 even when the header fades on mouse-exit.
         // Its frame is still positioned inside the header's y-band
         // in `layout()`.
-        configureIconButton(bellButton, symbol: "bell.fill",
+        // 0.12.7: outlined `bell` (not `bell.fill`) so the icon
+        // reads as hairline like the others. Sean: "should use all
+        // hairline icons to be consistent."
+        configureIconButton(bellButton, symbol: "bell",
                             tip: "Reminder", action: #selector(bellTapped))
         bellButton.isHidden = true
 
@@ -253,7 +256,15 @@ final class NoteContentView: NSView {
     @objc private func overflowTapped() { onOverflow?() }
 
     private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector) {
-        b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
+        // 0.12.7: unify weight across every chrome icon — regular
+        // hairline, small scale. Prevents SF Symbol defaults from
+        // mixing weights (e.g. `bell.fill` was heavier than
+        // `xmark` before). Sean: "should use all hairline icons
+        // to be consistent."
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            .applying(.init(scale: .small))
+        b.image = image?.withSymbolConfiguration(config)
         b.imagePosition = .imageOnly
         b.isBordered = false
         b.bezelStyle = .regularSquare
