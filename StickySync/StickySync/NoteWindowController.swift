@@ -836,6 +836,16 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         let menu = NSMenu()
         menu.autoenablesItems = false
 
+        // 0.12.6: font moved from the header cluster into the
+        // overflow menu — cuts an icon and eliminates the
+        // Aa-text-baseline-vs-SF-Symbol alignment mismatch.
+        let fontItem = NSMenuItem(title: "Change Font…",
+                                  action: #selector(fontFromOverflow),
+                                  keyEquivalent: "")
+        fontItem.target = self
+        menu.addItem(fontItem)
+        menu.addItem(.separator())
+
         let delete = NSMenuItem(title: "Delete Note",
                                 action: #selector(deleteFromOverflow),
                                 keyEquivalent: "")
@@ -858,6 +868,10 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     @objc private func deleteFromOverflow() {
         onRequestDelete?(note.id)
+    }
+
+    @objc private func fontFromOverflow() {
+        showFontPopover()
     }
 
     // MARK: - Layout persistence

@@ -171,6 +171,15 @@ final class NoteContentView: NSView {
                             tip: "Share note", action: #selector(shareTapped))
         header.addSubview(shareButton)
 
+        // 0.12.6: font (Aa) moved into the ⋯ overflow menu — Sean:
+        // "a lot of chrome and it's not really vertically aligned."
+        // Aa's text baseline never matched SF Symbol icon centers
+        // cleanly, and 6 icons was too dense. Chrome now caps at
+        // 5 (or 4 without an active reminder).
+        //
+        // fontButton stays declared/configured so tests + snapshots
+        // that reference it still compile, but it's no longer added
+        // as a subview.
         fontButton.title = "Aa"
         fontButton.isBordered = false
         fontButton.bezelStyle = .regularSquare
@@ -178,7 +187,6 @@ final class NoteContentView: NSView {
         fontButton.target = self
         fontButton.action = #selector(fontTapped)
         fontButton.toolTip = "Change font"
-        header.addSubview(fontButton)
 
         configureIconButton(closeButton, symbol: "xmark",
                             tip: "Close note", action: #selector(closeTapped))
@@ -428,26 +436,26 @@ final class NoteContentView: NSView {
         closeButton.frame = NSRect(x: edgePad, y: cy,
                                    width: iconSize, height: iconSize)
 
-        // Right cluster, filled right-to-left. 0.10.0 anchor is
-        // overflow ⋯. 0.12.5 slots bell ⏰ next to it (bell is a
-        // direct subview of the content view, not the header, so
-        // its frame is in bounds-space, not header-space).
+        // Right cluster, filled right-to-left. 0.12.6: 4 or 5 icons
+        // depending on whether a reminder is set. Font is no
+        // longer here (moved to ⋯ menu).
         let rightEdge = header.bounds.width - edgePad
         var x = rightEdge - iconSize
         overflowButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
         x -= iconSize + iconGap
         if !bellButton.isHidden {
-            // Convert bell's y from header-internal to bounds-space.
             let bellY = header.frame.origin.y + cy
             bellButton.frame = NSRect(x: x, y: bellY,
                                       width: iconSize, height: iconSize)
             x -= iconSize + iconGap
         }
         shareButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
-        x -= fontW + iconGap
-        fontButton.frame = NSRect(x: x, y: cy, width: fontW, height: iconSize)
         x -= iconSize + iconGap
         colorButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
+        // fontButton is defined + wired for the overflow menu; not
+        // laid into the chrome. `fontW` is retained above in case a
+        // future ship reintroduces it.
+        _ = fontW
 
         // Overlay: scrollView takes the FULL sticky height and the
         // header floats over it. Hover-hidden = text edge-to-edge, no
