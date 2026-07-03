@@ -123,6 +123,11 @@ final class NoteContentView: NSView {
     /// kerning. Values in points; positive = shift up in AppKit's
     /// non-flipped coord system, negative = shift down.
     private var iconOpticalYOffset: [ObjectIdentifier: CGFloat] = [:]
+    /// 0.12.11: icons in this set skip the bottom-alignment math
+    /// and center-align instead. For symbols whose visual "bottom"
+    /// isn't meaningful (ellipsis dots — three horizontal dots at
+    /// mid-line; bottom-aligning shoves them low).
+    private var centerAlignedIcons: Set<ObjectIdentifier> = []
 
     override var wantsUpdateLayer: Bool { true }
 
@@ -210,7 +215,8 @@ final class NoteContentView: NSView {
         header.addSubview(closeButton)
 
         configureIconButton(overflowButton, symbol: "ellipsis",
-                            tip: "More", action: #selector(overflowTapped))
+                            tip: "More", action: #selector(overflowTapped),
+                            centerAligned: true)
         header.addSubview(overflowButton)
 
         // 0.12.5: bell button — starts hidden. Shown when a
@@ -273,7 +279,7 @@ final class NoteContentView: NSView {
     @objc private func colorTapped() { onColor?() }
     @objc private func overflowTapped() { onOverflow?() }
 
-    private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector, opticalYOffset: CGFloat = 0) {
+    private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector, opticalYOffset: CGFloat = 0, centerAligned: Bool = false) {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
             .applying(.init(scale: .small))
@@ -287,6 +293,9 @@ final class NoteContentView: NSView {
         b.action = action
         b.toolTip = tip
         iconOpticalYOffset[ObjectIdentifier(b)] = opticalYOffset
+        if centerAligned {
+            centerAlignedIcons.insert(ObjectIdentifier(b))
+        }
     }
 
     /// 0.12.10: true bottom-alignment. NSButton centers its image
@@ -306,6 +315,12 @@ final class NoteContentView: NSView {
     /// value.
     private static let iconFrameSize: CGFloat = 16
     private func bottomAlignedY(for b: NSButton, baseCY: CGFloat) -> CGFloat {
+        // 0.12.11: symmetric icons (ellipsis) skip the
+        // bottom-align math and stay at baseCY — bottom-aligning
+        // three horizontal dots pushes them below the row.
+        if centerAlignedIcons.contains(ObjectIdentifier(b)) {
+            return baseCY + (iconOpticalYOffset[ObjectIdentifier(b)] ?? 0)
+        }
         let imgH = b.image?.size.height ?? Self.iconFrameSize
         // NSButton centers image in its frame: image bottom sits
         // (buttonH - imgH)/2 above button.origin.y. To place the
