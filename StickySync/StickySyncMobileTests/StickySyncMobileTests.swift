@@ -33,6 +33,9 @@ final class EmptyStubStore: NoteStore {
     func update(_ note: Note) {}
     func setLayout(_ layout: NoteLayout) {}
     func softDelete(id: UUID) {}
+    func deletedNotes() -> [Note] { [] }
+    func restore(id: UUID) {}
+    func hardDelete(id: UUID) {}
 
     func attachments(for noteID: UUID) -> [Attachment] { [] }
     func attachment(id: UUID) -> Attachment? { nil }
@@ -165,6 +168,9 @@ final class OrphanAttachmentStubStore: NoteStore {
     func update(_ note: Note) {}
     func setLayout(_ layout: NoteLayout) {}
     func softDelete(id: UUID) {}
+    func deletedNotes() -> [Note] { [] }
+    func restore(id: UUID) {}
+    func hardDelete(id: UUID) {}
 
     func attachments(for noteID: UUID) -> [Attachment] {
         // Single non-deleted attachment — but the test note's content
