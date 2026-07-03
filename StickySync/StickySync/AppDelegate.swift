@@ -278,6 +278,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.reminderNotifier.schedule(reminder, noteBodyPreview: notePreview)
             }
         }
+        controller.reminderNotifierCancel = { [weak self] reminderID in
+            self?.reminderNotifier.cancel(reminderID)
+        }
         controllers[note.id] = controller
         controller.show(focus: focus)
     }

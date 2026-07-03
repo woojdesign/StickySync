@@ -107,4 +107,33 @@ final class StickyChromeSnapshotTests: XCTestCase {
     func testChromeHidden_Color4_TextNearTop_DarkSticky() {
         assertSnapshot(of: makeNote(colorToken: "4", chromeVisible: false), as: .image)
     }
+
+    // MARK: - Bell (0.12.5)
+
+    /// Chrome visible + reminder set (future). Bell appears in the
+    /// right cluster, tinted with textColor.
+    func testChromeVisible_Color1_BellFuture() {
+        let view = makeNote(colorToken: "1", chromeVisible: true)
+        view.applyReminderState(hasReminder: true, fired: false)
+        view.layoutSubtreeIfNeeded(); view.needsDisplay = true; view.displayIfNeeded()
+        assertSnapshot(of: view, as: .image)
+    }
+
+    /// Chrome visible + reminder fired-past-due. Bell tinted
+    /// clay-red.
+    func testChromeVisible_Color1_BellFired() {
+        let view = makeNote(colorToken: "1", chromeVisible: true)
+        view.applyReminderState(hasReminder: true, fired: true)
+        view.layoutSubtreeIfNeeded(); view.needsDisplay = true; view.displayIfNeeded()
+        assertSnapshot(of: view, as: .image)
+    }
+
+    /// Chrome HIDDEN but a reminder is set — bell should still show
+    /// (it lives outside the header's alpha-fading hierarchy).
+    func testChromeHidden_BellStaysVisible() {
+        let view = makeNote(colorToken: "1", chromeVisible: false)
+        view.applyReminderState(hasReminder: true, fired: false)
+        view.layoutSubtreeIfNeeded(); view.needsDisplay = true; view.displayIfNeeded()
+        assertSnapshot(of: view, as: .image)
+    }
 }

@@ -57,6 +57,13 @@ public struct Reminder: Codable, Equatable, Identifiable {
     }
 }
 
+/// 0.12.5: posted whenever the store mutates (set / clear /
+/// markFired) so open windows can refresh the chrome bell state
+/// without polling. userInfo["noteID"] = UUID of the affected note.
+public extension Notification.Name {
+    static let reminderStoreDidChange = Notification.Name("reminderStoreDidChange")
+}
+
 /// Store contract. Both the Phase A local-only implementation and
 /// the Phase B CloudKit-backed one conform.
 ///
@@ -107,10 +114,16 @@ public final class UserDefaultsReminderStore: ReminderStore {
     public func set(_ reminder: Reminder) {
         let data = (try? JSONEncoder().encode(reminder)) ?? Data()
         defaults.set(data, forKey: keyPrefix + reminder.noteID.uuidString)
+        NotificationCenter.default.post(name: .reminderStoreDidChange,
+                                         object: nil,
+                                         userInfo: ["noteID": reminder.noteID])
     }
 
     public func clear(for noteID: UUID) {
         defaults.removeObject(forKey: keyPrefix + noteID.uuidString)
+        NotificationCenter.default.post(name: .reminderStoreDidChange,
+                                         object: nil,
+                                         userInfo: ["noteID": noteID])
     }
 
     public func markFired(_ reminderID: UUID, at date: Date) {
@@ -120,7 +133,7 @@ public final class UserDefaultsReminderStore: ReminderStore {
             var updated = r
             updated.fired = true
             updated.firedAt = date
-            set(updated)
+            set(updated) // set posts .reminderStoreDidChange
             return
         }
     }

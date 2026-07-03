@@ -27,6 +27,10 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     /// hasn't wired the notifier yet — the store still records the
     /// reminder either way.
     var onReminderSet: ((Reminder, String) -> Void)?
+    /// 0.12.5: called when the user clears an existing reminder
+    /// (bell → Clear). AppDelegate hands to ReminderNotifier so
+    /// the pending UNNotificationRequest is cancelled.
+    var reminderNotifierCancel: ((UUID) -> Void)?
     private var reminderPopover: NSPopover?
     private lazy var reminderChip = ReminderConfirmationChip()
 
@@ -110,6 +114,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         noteView.onFont = { [weak self] in self?.showFontPopover() }
         noteView.onClose = { [weak self] in self?.requestClose() }
         noteView.onOverflow = { [weak self] in self?.showOverflowMenu() }
+        noteView.onBell = { [weak self] in self?.showReminderEditPopover() }
         noteView.onToggleCollapse = { [weak self] in self?.toggleCollapse() }
         noteView.onShareWithPeople = { [weak self] in self?.shareWithPeople() }
         noteView.onHoverChange = { [weak self] hovering in
@@ -119,6 +124,14 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         applyAppearance()
         refreshShareIndicator()
         noteView.scrollView.isHidden = note.collapsed
+        // 0.12.5: sync the bell with the current reminder state,
+        // then refresh whenever the store changes for this note.
+        refreshReminderBell()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(reminderStoreDidChange(_:)),
+            name: .reminderStoreDidChange,
+            object: nil)
 
         // Repaint when the user picks a new theme (or iCloud syncs one in).
         // The token doesn't change — the hex resolution does — so we just
@@ -647,6 +660,62 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             saveNow()
             persistLayout()
         }
+    }
+
+    // MARK: - Reminder bell (0.12.5)
+
+    @objc private func reminderStoreDidChange(_ note: Notification) {
+        guard let noteID = note.userInfo?["noteID"] as? UUID,
+              noteID == self.note.id else { return }
+        refreshReminderBell()
+    }
+
+    private func refreshReminderBell() {
+        let r = reminderStore?.reminder(for: note.id)
+        noteView.applyReminderState(hasReminder: r != nil,
+                                     fired: r?.fired ?? false)
+        noteView.needsLayout = true
+        noteView.layoutSubtreeIfNeeded()
+    }
+
+    /// Tap on the ⏰ → open a picker pre-populated with the current
+    /// reminder's time + a "Clear reminder" button.
+    private func showReminderEditPopover() {
+        guard let store = reminderStore,
+              let existing = store.reminder(for: note.id) else { return }
+
+        let controller = RemindPickerController()
+        controller.initialDate = existing.fireAt
+        controller.allowClear = true
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = controller
+        reminderPopover = popover
+
+        controller.onConfirm = { [weak self, weak popover] fireAt in
+            guard let self else { return }
+            // Reuse the confirm path used by /remind — but with an
+            // empty strip range so we don't try to strip anything.
+            self.confirmReminder(fireAt: fireAt,
+                                  stripRange: NSRange(location: 0, length: 0))
+            popover?.performClose(nil)
+            self.reminderPopover = nil
+        }
+        controller.onClear = { [weak self, weak popover] in
+            guard let self else { return }
+            self.reminderStore?.clear(for: self.note.id)
+            self.reminderNotifierCancel?(existing.id)
+            popover?.performClose(nil)
+            self.reminderPopover = nil
+        }
+        controller.onCancel = { [weak self, weak popover] in
+            popover?.performClose(nil)
+            self?.reminderPopover = nil
+        }
+
+        popover.show(relativeTo: noteView.bellButton.bounds,
+                     of: noteView.bellButton,
+                     preferredEdge: .maxY)
     }
 
     // MARK: - /remind (0.12.1)

@@ -82,6 +82,12 @@ final class NoteContentView: NSView {
     /// etc.). See research writeup: destructive/secondary actions
     /// belong here, not in the primary chrome cluster.
     let overflowButton = NSButton()
+    /// 0.12.5: reminder bell (⏰). Shown only when a reminder is
+    /// set on this note. Always visible (not hover-revealed) when
+    /// present — it carries semantic weight the other chrome icons
+    /// don't. Tinted `textColor.withAlphaComponent(0.85)` for
+    /// future reminders; clay-red when fired-but-not-cleared.
+    let bellButton = NSButton()
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
     let markdownStorage: MarkdownTextStorage
@@ -92,6 +98,7 @@ final class NoteContentView: NSView {
     var onFont: (() -> Void)?
     var onClose: (() -> Void)?
     var onOverflow: (() -> Void)?
+    var onBell: (() -> Void)?
     var onToggleCollapse: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
     /// Tap "Share with someone…" — owner-side CKShare creation /
@@ -181,6 +188,16 @@ final class NoteContentView: NSView {
                             tip: "More", action: #selector(overflowTapped))
         header.addSubview(overflowButton)
 
+        // 0.12.5: bell button — starts hidden. Shown when a
+        // reminder is set (via `applyReminderState`). Added to the
+        // NoteContentView directly (not inside `header`) so it
+        // stays alpha-1 even when the header fades on mouse-exit.
+        // Its frame is still positioned inside the header's y-band
+        // in `layout()`.
+        configureIconButton(bellButton, symbol: "bell.fill",
+                            tip: "Reminder", action: #selector(bellTapped))
+        bellButton.isHidden = true
+
         // --- Scroll + text view ---
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -212,6 +229,9 @@ final class NoteContentView: NSView {
         // in the text view.
         addSubview(scrollView)
         addSubview(header)
+        // Bell is above the header (both z-order and semantically),
+        // so it stays visible + interactive when the header fades.
+        addSubview(bellButton)
 
         // A wide, reliable resize grip in the bottom-right.
         resizeGrip = ResizeGripView(frame: .zero)
@@ -237,6 +257,22 @@ final class NoteContentView: NSView {
 
     @objc private func fontTapped() { onFont?() }
     @objc private func closeTapped() { onClose?() }
+    @objc private func bellTapped() { onBell?() }
+
+    /// 0.12.5: reflect the current reminder state in the bell.
+    ///   - nil → bell hidden
+    ///   - future → bell shown, textColor-tinted
+    ///   - fired-but-not-cleared → bell shown, clay-red tinted
+    func applyReminderState(hasReminder: Bool, fired: Bool) {
+        bellButton.isHidden = !hasReminder
+        if hasReminder {
+            let textColor = Appearance.text(for: colorToken)
+            bellButton.contentTintColor = fired
+                ? .woojClay
+                : textColor.withAlphaComponent(0.85)
+        }
+        needsLayout = true
+    }
 
     /// Tap the share button:
     ///   • Already shared → straight to participant-management picker
@@ -392,13 +428,21 @@ final class NoteContentView: NSView {
         closeButton.frame = NSRect(x: edgePad, y: cy,
                                    width: iconSize, height: iconSize)
 
-        // Right cluster, filled right-to-left: overflow ⋯ anchors
-        // the right edge (0.10.0 addition, home for secondary /
-        // destructive actions); then share, font, color walking left.
+        // Right cluster, filled right-to-left. 0.10.0 anchor is
+        // overflow ⋯. 0.12.5 slots bell ⏰ next to it (bell is a
+        // direct subview of the content view, not the header, so
+        // its frame is in bounds-space, not header-space).
         let rightEdge = header.bounds.width - edgePad
         var x = rightEdge - iconSize
         overflowButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
         x -= iconSize + iconGap
+        if !bellButton.isHidden {
+            // Convert bell's y from header-internal to bounds-space.
+            let bellY = header.frame.origin.y + cy
+            bellButton.frame = NSRect(x: x, y: bellY,
+                                      width: iconSize, height: iconSize)
+            x -= iconSize + iconGap
+        }
         shareButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
         x -= fontW + iconGap
         fontButton.frame = NSRect(x: x, y: cy, width: fontW, height: iconSize)

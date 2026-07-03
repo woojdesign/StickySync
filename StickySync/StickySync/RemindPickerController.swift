@@ -16,6 +16,16 @@ final class RemindPickerController: NSViewController {
     /// dismissed without picking.
     var onConfirm: ((Date) -> Void)?
     var onCancel: (() -> Void)?
+    /// 0.12.5: user tapped "Clear reminder" (edit-mode only).
+    var onClear: (() -> Void)?
+    /// 0.12.5: when non-nil, the custom date picker opens
+    /// pre-populated with this value and the "Set reminder"
+    /// button is shown by default instead of the presets.
+    var initialDate: Date?
+    /// 0.12.5: when true, a "Clear reminder" button is shown.
+    /// Set this when opening the picker from the ⏰ bell (edit mode)
+    /// rather than from a fresh /remind (create mode).
+    var allowClear: Bool = false
 
     /// Set true when we present the custom date picker. Used so
     /// the caller doesn't tear us down on dismiss.
@@ -68,6 +78,27 @@ final class RemindPickerController: NSViewController {
         customConfirm.isHidden = true
         stack.addArrangedSubview(customConfirm)
 
+        // 0.12.5: edit mode — pre-populate the date picker and
+        // hide the presets. The user can still hit any preset if
+        // they want, but the primary intent when opening from the
+        // bell is to tweak the existing time or clear.
+        if let initial = initialDate {
+            datePicker.dateValue = initial
+            enterCustomMode()
+            let title = NSTextField(labelWithString: "Reminder set for:")
+            title.font = .systemFont(ofSize: 12)
+            title.textColor = .secondaryLabelColor
+            stack.insertArrangedSubview(title, at: 1)
+        }
+
+        if allowClear {
+            let clear = NSButton(title: "Clear reminder",
+                                 target: self, action: #selector(clearTapped))
+            clear.bezelStyle = .rounded
+            clear.contentTintColor = .systemRed
+            stack.addArrangedSubview(clear)
+        }
+
         view = root
     }
 
@@ -105,4 +136,6 @@ final class RemindPickerController: NSViewController {
     @objc private func customConfirmTapped() {
         onConfirm?(datePicker.dateValue)
     }
+
+    @objc private func clearTapped() { onClear?() }
 }
