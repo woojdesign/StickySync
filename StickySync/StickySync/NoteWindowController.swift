@@ -658,6 +658,16 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             return
         }
 
+        // 0.12.2: try natural-language parse first. If the user
+        // typed `/remind tomorrow 9am`, skip the popover entirely
+        // and set the reminder inline. Only fall back to the
+        // preset popover when the free-text is empty or
+        // unparseable.
+        if let fireAt = RemindNLParser.parse(match.freeText, now: Date()) {
+            confirmReminder(fireAt: fireAt, stripRange: match.lineRangeToStrip)
+            return
+        }
+
         let controller = RemindPickerController()
         let popover = NSPopover()
         popover.behavior = .transient
