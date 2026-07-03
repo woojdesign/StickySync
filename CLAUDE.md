@@ -27,16 +27,36 @@ a real bug.
   (0.8.1) — turned a hard-to-test instance method into a pure static + a
   thin wrapper. Six tests in 80 lines.
 - **Visually verify appearance before saying shipped.** Build-clean +
-  rule-7-alive is necessary but not sufficient for UI changes. Take a
-  screencap of the affected surface, open Read on the PNG, eyeball it
-  before commit. When the UI genuinely can't be driven from CLI (paste,
-  hover, modal, floating indicator that needs live state) — say so
-  explicitly in the ship message and don't claim done. Sean's attention
-  is the scarce resource.
-- **MCP server lives in the running production app.** If `mcp__stickysync__*`
-  tools return "Unable to connect," recover with
-  `open /Applications/StickySync.app` (production app, not the Debug
-  build) and retry. Don't ask Sean to reopen.
+  rule-7-alive is necessary but not sufficient for UI changes.
+  - **Preferred (Mac chrome):** launch the Debug build with
+    `--qa-sticky --qa-chrome-visible --qa-frame x,y,w,h`, screencap,
+    open Read on the PNG. `StickyChromeSnapshotTests` catches the rest
+    (any pixel diff on 7 colors × chrome states = test failure).
+  - **When you genuinely can't drive it from CLI** (hover states, live
+    user input, modals, iOS): say so explicitly in the ship message
+    and don't claim done. Sean's attention is scarce.
+  - **Intentional chrome changes:** delete the affected PNGs under
+    `StickySyncTests/__Snapshots__/StickyChromeSnapshotTests/` and
+    rerun to regenerate baselines. Commit new PNGs alongside the code
+    change so the diff is auditable.
+- **WIP goes through the beta channel first.** For any UI change that
+  needs more than one iteration to look right, ship via
+  `./beta-release.sh 0.X.Y-betaN`, not `./release.sh`. Sean's home
+  Mac (StickySync menu → Beta Channel) receives WIP; stable users see
+  nothing until you promote via a normal `./release.sh`. Keeps
+  5-shipment feature arcs from going public half-baked.
+- **Check the tracker sticky at session start.** Sean maintains the
+  StickySync backlog + bug list in a mint-colored sticky. Read it
+  via MCP before assuming what's next:
+  `mcp__stickysync__get_note` with id
+  `70592534-BA3C-4E6E-BD36-162D56AF6F89`. Update the completed section
+  after shipping — the tracker is source-of-truth, not this file.
+  Full pattern: [[pattern_bug_loop_via_mcp]] in memory.
+- **MCP server lives in the running production app** (port 47823).
+  Debug builds host MCP on port 47824 so they can coexist. If
+  `mcp__stickysync__*` returns "Unable to connect," first check both
+  ports; if neither, `open /Applications/StickySync.app` and retry.
+  Don't ask Sean to reopen.
 - **Docs live under `docs/`** (see `docs/README.md` for the map). Release
   notes live under `release-notes/` (pipeline artifact; intentionally
   separate).
@@ -111,6 +131,9 @@ Most of this is already done on Sean's main Mac. Recreate if you're on a fresh s
 - **PTY exhaustion**: long Xcode sessions hit the 511 `kern.tty.ptmx_max` limit → "Pseudo Terminal Setup Error / Device not configured" on launch. Quit + reopen Xcode, or reboot.
 - **Background bash shells don't load `~/.zshrc`** — pass `ASC_*` env vars inline when running `testflight.sh` from a non-interactive context.
 - **First Beta App Review** (external testers, first build) takes 24–72h. Subsequent builds to the same group usually clear in minutes. Internal testers always skip review.
+- **`SWIFT_ACTIVE_COMPILATION_CONDITIONS` MUST include `$(inherited)`.** Target-level overrides that drop it silently kill every `#if DEBUG` block in the app target. If you edit build settings, the app target's Debug condition must read `"CLOUDKIT DEBUG $(inherited)"`. Verified landmine 2026-07-03 (0.11.2 fix — every `#if DEBUG` in the app was dead until this).
+- **MCP ports**: Release on 47823, Debug on 47824 (side-by-side coexistence). If you change one, update the other + the port assertion in `MCPPortTests`.
+- **Wedged Xcode / CoreSimulator**: run `./scripts/reset-devstate.sh` before rebooting. Recovers from "Device was allocated but was stuck in creation state" and stuck sourcekit-lsp / swift-frontend.
 
 ## Known open items
 
@@ -129,4 +152,33 @@ xcodebuild build -project StickySync/StickySync.xcodeproj \
 xcodebuild build -project StickySync/StickySync.xcodeproj \
     -scheme StickySync -configuration Debug -destination 'platform=macOS' \
     -derivedDataPath /tmp/x CODE_SIGNING_ALLOWED=NO -quiet
+```
+
+## Dev-workflow tools (0.11.x pack)
+
+Ship WIP through beta before promoting to stable:
+
+```sh
+./beta-release.sh 0.12.1-beta1     # your home Mac (Beta Channel on)
+./release.sh 0.12.1                # public, after visual sign-off
+```
+
+Chrome iteration on Debug builds:
+
+```sh
+open /tmp/x/Build/Products/Debug/StickySync.app \
+    --args --qa-sticky --qa-chrome-visible --qa-frame 300,400,500,240
+screencapture -x /tmp/chrome.png     # then Read on the PNG
+```
+
+Full flag list: `QALaunchOptions.swift`. Snapshot baselines auto-catch
+pixel drift on 7 colors × chrome states — regenerate intentionally
+via `rm StickySyncTests/__Snapshots__/StickyChromeSnapshotTests/<name>.png`
++ rerun.
+
+Recovery + logs:
+
+```sh
+./scripts/reset-devstate.sh          # unwedge Xcode/CoreSimulator
+# StickySync menu → Copy Recent Logs (60s)   # Debug-only, clipboard
 ```
