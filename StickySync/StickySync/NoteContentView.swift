@@ -180,12 +180,12 @@ final class NoteContentView: NSView {
         // body dominates the upper portion.
         configureIconButton(colorButton, symbol: "paintpalette",
                             tip: "Change color", action: #selector(colorTapped),
-                            opticalYOffset: -1)
+                            opticalYOffset: 0)
         header.addSubview(colorButton)
 
         configureIconButton(shareButton, symbol: "square.and.arrow.up",
                             tip: "Share note", action: #selector(shareTapped),
-                            opticalYOffset: -1)
+                            opticalYOffset: 0)
         header.addSubview(shareButton)
 
         // 0.12.6: font (Aa) moved into the ⋯ overflow menu — Sean:
@@ -224,7 +224,7 @@ final class NoteContentView: NSView {
         // hairline icons to be consistent."
         configureIconButton(bellButton, symbol: "bell",
                             tip: "Reminder", action: #selector(bellTapped),
-                            opticalYOffset: -0.5)
+                            opticalYOffset: 0)
         bellButton.isHidden = true
 
         // --- Scroll + text view ---
@@ -275,10 +275,9 @@ final class NoteContentView: NSView {
 
     private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector, opticalYOffset: CGFloat = 0) {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
-        // 0.12.7: unify weight across every chrome icon — regular
-        // hairline, small scale.
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
             .applying(.init(scale: .small))
+
         b.image = image?.withSymbolConfiguration(config)
         b.imagePosition = .imageOnly
         b.isBordered = false
@@ -287,13 +286,21 @@ final class NoteContentView: NSView {
         b.target = self
         b.action = action
         b.toolTip = tip
-        // 0.12.8: record the optical y-nudge; layout applies it.
         iconOpticalYOffset[ObjectIdentifier(b)] = opticalYOffset
     }
 
-    /// 0.12.8: base cy + optical nudge for a specific icon.
+    /// 0.12.9: uniform down-nudge on all chrome icons. SF Symbols
+    /// have optical centers slightly above their bounding-box
+    /// center — nudging every icon down by ~1pt sits them on a
+    /// shared visual baseline (approximates "bottom alignment"
+    /// without needing a custom cell subclass, which caused
+    /// overdraw/clipping issues when tried in 0.12.9-dev).
+    /// Per-icon offset from `iconOpticalYOffset` still applies on
+    /// top for future fine-tuning; default is 0.
+    private static let uniformIconBottomNudge: CGFloat = -1.0
     private func opticallyCenteredY(for b: NSButton, baseCY: CGFloat) -> CGFloat {
-        baseCY + (iconOpticalYOffset[ObjectIdentifier(b)] ?? 0)
+        baseCY + Self.uniformIconBottomNudge
+            + (iconOpticalYOffset[ObjectIdentifier(b)] ?? 0)
     }
 
     @objc private func fontTapped() { onFont?() }
