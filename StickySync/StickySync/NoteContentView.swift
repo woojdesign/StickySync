@@ -247,7 +247,15 @@ final class NoteContentView: NSView {
         // of 4 made the top feel tight now that the chrome overlays
         // (0.9.4) instead of reserving a 26pt gap. Sean: "matching
         // the left, right, and bottom margins on the top as well."
-        textView.textContainerInset = NSSize(width: 12, height: 12)
+        // 0.12.12: 20pt text container inset on all four sides.
+        // Combined with a 6pt gap between the scrollView's top and
+        // the sticky's top (applied in `layout()`), the first line
+        // of text sits 26pt from the sticky top — clear of the
+        // chrome band so hover-revealed chrome never overlaps
+        // editable content. L/R/bottom stay at 20pt for a balanced
+        // "framed note" feel. Sean called this: the simpler
+        // alternative to a floating-chrome NSWindow.
+        textView.textContainerInset = NSSize(width: 20, height: 20)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -309,7 +317,10 @@ final class NoteContentView: NSView {
     /// (queried at layout time via `button.image?.size.height`).
     /// Analogous to typesetting bottom-aligning glyphs regardless
     /// of their descender depth.
-    private static let bottomBaselineOffset: CGFloat = -1.0
+    /// 0.12.12: bumped +3 from the previous −1 (Sean: "move the
+    /// bottom aligned icons up 3px or so"). Ellipsis stays center-
+    /// aligned via the `centerAligned` flag and doesn't move.
+    private static let bottomBaselineOffset: CGFloat = 2.0
     /// Icon button frame side length. Kept as a class-level constant
     /// so both `layout()` and `bottomAlignedY(for:)` see the same
     /// value.
@@ -544,15 +555,17 @@ final class NoteContentView: NSView {
                                    width: iconSize, height: iconSize)
         _ = fontW
 
-        // Overlay: scrollView takes the FULL sticky height and the
-        // header floats over it. Hover-hidden = text edge-to-edge, no
-        // wasted 26pt gap. Hover-shown = icons appear over the top of
-        // whatever content is there. Sean: "chrome should NOT always
-        // be visible — the problem is that the gap below the top of
-        // the margin and text is too large when the chrome is not
-        // visible." (Overlays are cheap; the header's alpha-hidden
-        // buttons don't draw when invisible.)
-        scrollView.frame = NSRect(x: 0, y: 0, width: b.width, height: b.height)
+        // 0.12.12: shrink the scrollView so it leaves a 6pt gap at
+        // the top of the sticky (below the sticky's top edge, above
+        // the scrollView's top edge). Combined with the 20pt
+        // textContainerInset, the first line of text ends up 26pt
+        // from the sticky top — clear of the chrome band. Overlay
+        // pattern from 0.9.4 is gone; chrome now sits in reserved
+        // top space and can never touch text.
+        let topReserve: CGFloat = 6
+        scrollView.frame = NSRect(x: 0, y: 0,
+                                   width: b.width,
+                                   height: max(0, b.height - topReserve))
         // Do NOT set textContainer.containerSize here. textView has
         // `widthTracksTextView = true`, which makes the container width
         // follow the textView's content area (i.e. width minus
