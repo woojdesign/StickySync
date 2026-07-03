@@ -35,12 +35,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var voiceCapture: VoiceCaptureController?
 
     #if canImport(Sparkle)
-    // In-app auto-updates. Start the updater only when a feed is configured —
-    // shipping builds carry SUFeedURL via the merged Info.plist; dev (Debug)
-    // builds don't, so it stays quiet there instead of erroring on a missing feed.
+    /// 0.11.5 hotfix: swaps the Sparkle feed URL + allowed channels at
+    /// runtime based on `BetaChannel.isEnabled`. Prior versions set
+    /// `SUFeedURL` in UserDefaults on toggle, but Sparkle reads
+    /// SUFeedURL from Info.plist at controller-init time — the
+    /// UserDefaults write never took effect, so the Beta Channel
+    /// toggle appeared to work but Sparkle kept hitting the stable
+    /// feed. The delegate is Sparkle's supported way to change the
+    /// feed URL per check.
+    private let updaterDelegate = BetaAwareUpdaterDelegate()
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil,
-        updaterDelegate: nil, userDriverDelegate: nil)
+        updaterDelegate: updaterDelegate, userDriverDelegate: nil)
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
