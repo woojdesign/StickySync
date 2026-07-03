@@ -21,6 +21,12 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     /// controller construction. Optional to keep tests simple —
     /// missing store → /remind silently no-ops.
     var reminderStore: ReminderStore?
+    /// 0.12.3: called after a reminder is set, so AppDelegate can
+    /// request notification authorization + schedule the
+    /// UNNotificationRequest. Ping happens even if the caller
+    /// hasn't wired the notifier yet — the store still records the
+    /// reminder either way.
+    var onReminderSet: ((Reminder, String) -> Void)?
     private var reminderPopover: NSPopover?
     private lazy var reminderChip = ReminderConfirmationChip()
 
@@ -728,6 +734,7 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             firedAt: nil
         )
         store.set(reminder)
+        onReminderSet?(reminder, note.content)
 
         // Floating confirmation pill above the sticky.
         reminderChip.show(anchorFrame: window.frame, fireAt: fireAt)

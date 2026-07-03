@@ -22,6 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Phase B swaps for a CloudKit-backed implementation once
     /// Sean can do the schema redeploy.
     let reminderStore: ReminderStore = UserDefaultsReminderStore()
+    /// 0.12.3: schedules real notifications via
+    /// UNUserNotificationCenter. Lazy so it isn't initialized under
+    /// XCTest (which returns early from applicationDidFinishLaunching
+    /// before we'd want to touch the notification stack).
+    private(set) lazy var reminderNotifier = ReminderNotifier(
+        store: reminderStore,
+        noteStore: store as AnyObject & NoteStore
+    )
     private var mcpServer: MCPServer?
     private var mcpConfigWindow: NSWindow?
     private var voiceCapture: VoiceCaptureController?
@@ -54,6 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 30 days. Runs before we start opening windows so the first
         // pass through allNotes() reflects the post-purge state.
         RecentlyDeletedPurge.purge(store: store)
+
+        // 0.12.3: re-schedule any active reminders that lost their
+        // pending UNNotificationRequest across a crash / OS restore.
+        // Safe: schedule is idempotent (same identifier replaces).
+        reminderNotifier.rescheduleActive()
 
         // 0.11.0: DEBUG-only QA launch path. When --qa-sticky is
         // present, skip window restoration + welcome sticky and
@@ -258,6 +271,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onRequestClose = { [weak self] id in self?.handleRequestClose(id) }
         controller.onRequestDelete = { [weak self] id in self?.handleRequestDelete(id) }
         controller.reminderStore = reminderStore
+        controller.onReminderSet = { [weak self] reminder, notePreview in
+            guard let self else { return }
+            self.reminderNotifier.ensureAuthorized { granted in
+                guard granted else { return }
+                self.reminderNotifier.schedule(reminder, noteBodyPreview: notePreview)
+            }
+        }
         controllers[note.id] = controller
         controller.show(focus: focus)
     }
