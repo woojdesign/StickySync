@@ -198,6 +198,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 0.11.1: user toggled beta channel. Flip the state, then
+    /// reflect it in the menu item's checkmark. Sparkle picks up
+    /// the new feed URL + allowed-channels on its next check.
+    @objc func toggleBetaChannel(_ sender: NSMenuItem) {
+        let enabled = !BetaChannel.isEnabled
+        BetaChannel.setEnabled(enabled)
+        sender.state = enabled ? .on : .off
+
+        let alert = NSAlert()
+        alert.messageText = enabled ? "Beta Channel enabled." : "Beta Channel disabled."
+        alert.informativeText = enabled
+            ? "You'll receive beta builds on the next update check. Use Check for Updates… to check now."
+            : "You'll return to the stable channel on the next update check."
+        alert.runModal()
+    }
+
     private func openWindow(for note: Note, focus: Bool) {
         let controller = NoteWindowController(note: note, store: store)
         controller.onRequestClose = { [weak self] id in self?.handleRequestClose(id) }
@@ -495,6 +511,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                      keyEquivalent: "")
         updatesItem.target = updaterController
         appMenu.addItem(updatesItem)
+
+        // 0.11.1: beta channel toggle. Reads/writes SUFeedURL and
+        // SUAllowedChannels UserDefaults, so Sparkle picks up the
+        // change on the next check (no restart needed). Checkmark
+        // reflects current state.
+        let betaItem = NSMenuItem(title: "Beta Channel",
+                                  action: #selector(toggleBetaChannel(_:)),
+                                  keyEquivalent: "")
+        betaItem.target = self
+        betaItem.state = BetaChannel.isEnabled ? .on : .off
+        appMenu.addItem(betaItem)
         #endif
         appMenu.addItem(.separator())
         appMenu.addItem(aiAccessMainMenuItem())
