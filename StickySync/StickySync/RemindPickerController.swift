@@ -31,42 +31,64 @@ final class RemindPickerController: NSViewController {
     /// the caller doesn't tear us down on dismiss.
     private var customMode = false
 
+    // Popover content sizes.
+    private static let presetSize = NSSize(width: 210, height: 200)
+    // 0.12.14: custom mode was (260, 300) with .clockAndCalendar —
+    // Sean preferred the compact .textFieldAndStepper picker, just
+    // with less padding around it. Compact size hugs the picker +
+    // "Set reminder" button.
+    private static let customSize = NSSize(width: 210, height: 150)
+
     private let stack = NSStackView()
     private let datePicker = NSDatePicker()
     private let customConfirm = NSButton(title: "Set reminder",
                                           target: nil, action: nil)
 
     override func loadView() {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 220))
+        // 0.12.14: sized-to-content. Was 260×220 with .regularSquare
+        // buttons stretched full-width + leading text = lots of
+        // empty space per row. Now: ~210pt wide, rounded pill
+        // buttons with centered labels, tighter row spacing.
+        // Popover expands to `customSize` in custom mode.
+        let root = NSView(frame: NSRect(origin: .zero, size: Self.presetSize))
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical
-        stack.spacing = 6
-        stack.alignment = .leading
+        stack.spacing = 4
+        stack.alignment = .centerX
+        stack.distribution = .fill
         root.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            stack.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
-            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            stack.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
         ])
 
         let title = NSTextField(labelWithString: "Remind me")
         title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.alignment = .center
         stack.addArrangedSubview(title)
 
         for preset in RemindPreset.allCases {
             let button = NSButton(title: preset.label,
                                   target: self,
                                   action: #selector(presetTapped(_:)))
-            button.bezelStyle = .regularSquare
+            button.bezelStyle = .rounded
             button.setButtonType(.momentaryLight)
-            button.alignment = .left
+            button.alignment = .center
             button.identifier = NSUserInterfaceItemIdentifier(rawValue: presetTag(preset))
+            // Rounded bezel + centerX stack alignment lets each pill
+            // size to its label instead of stretching the full width.
             stack.addArrangedSubview(button)
         }
 
         // Custom-mode UI stays hidden until the user picks
         // `.custom`. Wire the confirm target lazily too.
+        //
+        // 0.12.14: kept `.textFieldAndStepper` (compact) — Sean
+        // liked the picker style, just wanted less padding around
+        // it in the popover. `customSize` is now sized to hug the
+        // picker + Set reminder button rather than being 300pt tall.
         datePicker.datePickerStyle = .textFieldAndStepper
         datePicker.datePickerElements = [.yearMonthDay, .hourMinute]
         datePicker.dateValue = Date().addingTimeInterval(60 * 60)
@@ -100,6 +122,7 @@ final class RemindPickerController: NSViewController {
         }
 
         view = root
+        preferredContentSize = customMode ? Self.customSize : Self.presetSize
     }
 
     private func presetTag(_ p: RemindPreset) -> String {
@@ -131,6 +154,9 @@ final class RemindPickerController: NSViewController {
         }
         datePicker.isHidden = false
         customConfirm.isHidden = false
+        // Resize the popover to fit the clock+calendar picker.
+        // NSPopover observes preferredContentSize and animates.
+        preferredContentSize = Self.customSize
     }
 
     @objc private func customConfirmTapped() {
