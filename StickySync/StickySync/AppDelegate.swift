@@ -51,6 +51,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // pass through allNotes() reflects the post-purge state.
         RecentlyDeletedPurge.purge(store: store)
 
+        // 0.11.0: DEBUG-only QA launch path. When --qa-sticky is
+        // present, skip window restoration + welcome sticky and
+        // spawn a deterministic one so Claude can screencap chrome
+        // iterations before shipping. See QALaunchOptions.
+        if let qa = QALaunchOptions.fromCommandLine() {
+            spawnQASticky(qa)
+            return
+        }
+
         let notes = store.allNotes()
         if notes.isEmpty {
             let welcome = Note(
@@ -167,6 +176,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Note lifecycle
+
+    /// 0.11.0: seed a deterministic sticky for chrome verification.
+    /// Not synced to CloudKit (uses the current store, so cleanups
+    /// after QA runs are on the operator). Force-visible chrome
+    /// respects the --qa-chrome-visible flag.
+    private func spawnQASticky(_ qa: QALaunchOptions) {
+        let note = Note(
+            content: qa.text,
+            colorToken: String(qa.colorSlot)
+        )
+        store.add(note)
+        openWindow(for: note, focus: true)
+        guard let controller = controllers[note.id] else { return }
+        controller.window.setFrame(qa.frame, display: true)
+        if qa.chromeVisible {
+            // Nudge past the fade-in so screencap catches full alpha.
+            // The setChromeVisible(true, animated: false) call skips
+            // the 0.12s fade.
+            controller.setChromeVisibleForQA(true)
+        }
+    }
 
     private func openWindow(for note: Note, focus: Bool) {
         let controller = NoteWindowController(note: note, store: store)

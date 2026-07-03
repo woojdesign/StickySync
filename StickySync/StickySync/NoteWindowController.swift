@@ -637,6 +637,14 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         onRequestClose?(note.id)
     }
 
+    /// 0.11.0: DEBUG QA helper — forces the chrome hover state so
+    /// automated screencaps see the full icon set + band without
+    /// simulating mouse hover. Called by AppDelegate.spawnQASticky
+    /// when `--qa-chrome-visible` is set.
+    func setChromeVisibleForQA(_ visible: Bool) {
+        noteView.setChromeVisible(visible, animated: false)
+    }
+
     // MARK: - Overflow menu (⋯)
 
     /// Shows the small menu anchored to the ⋯ button. 0.10.0 ships
