@@ -289,18 +289,41 @@ final class NoteContentView: NSView {
         iconOpticalYOffset[ObjectIdentifier(b)] = opticalYOffset
     }
 
-    /// 0.12.9: uniform down-nudge on all chrome icons. SF Symbols
-    /// have optical centers slightly above their bounding-box
-    /// center — nudging every icon down by ~1pt sits them on a
-    /// shared visual baseline (approximates "bottom alignment"
-    /// without needing a custom cell subclass, which caused
-    /// overdraw/clipping issues when tried in 0.12.9-dev).
-    /// Per-icon offset from `iconOpticalYOffset` still applies on
-    /// top for future fine-tuning; default is 0.
-    private static let uniformIconBottomNudge: CGFloat = -1.0
-    private func opticallyCenteredY(for b: NSButton, baseCY: CGFloat) -> CGFloat {
-        baseCY + Self.uniformIconBottomNudge
+    /// 0.12.10: true bottom-alignment. NSButton centers its image
+    /// vertically inside the cell frame, and each SF Symbol has a
+    /// different intrinsic image height — so identical frame y
+    /// gives different visual bottoms.
+    ///
+    /// Fix: compute per-button y such that the drawn glyph's
+    /// bottom sits at the shared `targetBaselineY` we want across
+    /// the row. That accounts for each icon's actual image size
+    /// (queried at layout time via `button.image?.size.height`).
+    /// Analogous to typesetting bottom-aligning glyphs regardless
+    /// of their descender depth.
+    private static let bottomBaselineOffset: CGFloat = -1.0
+    /// Icon button frame side length. Kept as a class-level constant
+    /// so both `layout()` and `bottomAlignedY(for:)` see the same
+    /// value.
+    private static let iconFrameSize: CGFloat = 16
+    private func bottomAlignedY(for b: NSButton, baseCY: CGFloat) -> CGFloat {
+        let imgH = b.image?.size.height ?? Self.iconFrameSize
+        // NSButton centers image in its frame: image bottom sits
+        // (buttonH - imgH)/2 above button.origin.y. To place the
+        // image's bottom at a target y line, offset upward.
+        let centeredInset = max(0, (Self.iconFrameSize - imgH) / 2)
+        // targetBaselineY is the desired glyph-bottom line, shared
+        // by all icons. We derive it from baseCY + the uniform
+        // baseline offset, then subtract the centeredInset so the
+        // glyph (drawn centered in the button) lands on it.
+        let targetBaselineY = baseCY + Self.bottomBaselineOffset
+        return targetBaselineY - centeredInset
             + (iconOpticalYOffset[ObjectIdentifier(b)] ?? 0)
+    }
+
+    /// Retained alias so existing call sites in `layout()` don't
+    /// need churn.
+    private func opticallyCenteredY(for b: NSButton, baseCY: CGFloat) -> CGFloat {
+        bottomAlignedY(for: b, baseCY: baseCY)
     }
 
     @objc private func fontTapped() { onFont?() }
