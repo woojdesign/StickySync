@@ -115,6 +115,15 @@ final class NoteContentView: NSView {
 
     private var trackingArea: NSTrackingArea?
 
+    /// 0.12.8: per-icon y-nudges for optical vertical alignment.
+    /// SF Symbols have different visual weight centers depending on
+    /// where the glyph's mass sits — a share arrow above a small
+    /// square reads as top-heavy at geometric center; the ellipsis
+    /// dots read as symmetric. Analogous to typesetting's optical
+    /// kerning. Values in points; positive = shift up in AppKit's
+    /// non-flipped coord system, negative = shift down.
+    private var iconOpticalYOffset: [ObjectIdentifier: CGFloat] = [:]
+
     override var wantsUpdateLayer: Bool { true }
 
     override init(frame frameRect: NSRect) {
@@ -163,12 +172,20 @@ final class NoteContentView: NSView {
         // in the text view as a cursor move instead of hitting the
         // buttons.
 
+        // 0.12.8: optical y-nudges for the icons whose SF Symbol
+        // glyph masses aren't centered in the bounding box. Values
+        // in points, positive = up. Tuned by eyeballing snapshot
+        // baselines with the icons at the same y=cy — palette body
+        // is top-heavy, share arrow sits above the square, bell's
+        // body dominates the upper portion.
         configureIconButton(colorButton, symbol: "paintpalette",
-                            tip: "Change color", action: #selector(colorTapped))
+                            tip: "Change color", action: #selector(colorTapped),
+                            opticalYOffset: -1)
         header.addSubview(colorButton)
 
         configureIconButton(shareButton, symbol: "square.and.arrow.up",
-                            tip: "Share note", action: #selector(shareTapped))
+                            tip: "Share note", action: #selector(shareTapped),
+                            opticalYOffset: -1)
         header.addSubview(shareButton)
 
         // 0.12.6: font (Aa) moved into the ⋯ overflow menu — Sean:
@@ -206,7 +223,8 @@ final class NoteContentView: NSView {
         // reads as hairline like the others. Sean: "should use all
         // hairline icons to be consistent."
         configureIconButton(bellButton, symbol: "bell",
-                            tip: "Reminder", action: #selector(bellTapped))
+                            tip: "Reminder", action: #selector(bellTapped),
+                            opticalYOffset: -0.5)
         bellButton.isHidden = true
 
         // --- Scroll + text view ---
@@ -255,13 +273,10 @@ final class NoteContentView: NSView {
     @objc private func colorTapped() { onColor?() }
     @objc private func overflowTapped() { onOverflow?() }
 
-    private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector) {
+    private func configureIconButton(_ b: NSButton, symbol: String, tip: String, action: Selector, opticalYOffset: CGFloat = 0) {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
         // 0.12.7: unify weight across every chrome icon — regular
-        // hairline, small scale. Prevents SF Symbol defaults from
-        // mixing weights (e.g. `bell.fill` was heavier than
-        // `xmark` before). Sean: "should use all hairline icons
-        // to be consistent."
+        // hairline, small scale.
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
             .applying(.init(scale: .small))
         b.image = image?.withSymbolConfiguration(config)
@@ -272,6 +287,13 @@ final class NoteContentView: NSView {
         b.target = self
         b.action = action
         b.toolTip = tip
+        // 0.12.8: record the optical y-nudge; layout applies it.
+        iconOpticalYOffset[ObjectIdentifier(b)] = opticalYOffset
+    }
+
+    /// 0.12.8: base cy + optical nudge for a specific icon.
+    private func opticallyCenteredY(for b: NSButton, baseCY: CGFloat) -> CGFloat {
+        baseCY + (iconOpticalYOffset[ObjectIdentifier(b)] ?? 0)
     }
 
     @objc private func fontTapped() { onFont?() }
@@ -444,28 +466,37 @@ final class NoteContentView: NSView {
         let cy = (headerHeight - iconSize) / 2
         let fontW: CGFloat = 24
 
-        closeButton.frame = NSRect(x: edgePad, y: cy,
+        closeButton.frame = NSRect(x: edgePad,
+                                   y: opticallyCenteredY(for: closeButton, baseCY: cy),
                                    width: iconSize, height: iconSize)
 
         // Right cluster, filled right-to-left. 0.12.6: 4 or 5 icons
         // depending on whether a reminder is set. Font is no
         // longer here (moved to ⋯ menu).
+        // 0.12.8: each icon uses its optical y-nudge (see the
+        // opticalYOffset dict populated in setup).
         let rightEdge = header.bounds.width - edgePad
         var x = rightEdge - iconSize
-        overflowButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
+        overflowButton.frame = NSRect(x: x,
+                                      y: opticallyCenteredY(for: overflowButton, baseCY: cy),
+                                      width: iconSize, height: iconSize)
         x -= iconSize + iconGap
         if !bellButton.isHidden {
-            let bellY = header.frame.origin.y + cy
-            bellButton.frame = NSRect(x: x, y: bellY,
+            // Bell lives in bounds space (not header space); nudge
+            // is applied in its own coord system too.
+            let bellBaseY = header.frame.origin.y + cy
+            bellButton.frame = NSRect(x: x,
+                                      y: opticallyCenteredY(for: bellButton, baseCY: bellBaseY),
                                       width: iconSize, height: iconSize)
             x -= iconSize + iconGap
         }
-        shareButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
+        shareButton.frame = NSRect(x: x,
+                                   y: opticallyCenteredY(for: shareButton, baseCY: cy),
+                                   width: iconSize, height: iconSize)
         x -= iconSize + iconGap
-        colorButton.frame = NSRect(x: x, y: cy, width: iconSize, height: iconSize)
-        // fontButton is defined + wired for the overflow menu; not
-        // laid into the chrome. `fontW` is retained above in case a
-        // future ship reintroduces it.
+        colorButton.frame = NSRect(x: x,
+                                   y: opticallyCenteredY(for: colorButton, baseCY: cy),
+                                   width: iconSize, height: iconSize)
         _ = fontW
 
         // Overlay: scrollView takes the FULL sticky height and the
