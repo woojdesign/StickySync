@@ -84,10 +84,19 @@ final class NoteContentView: NSView {
     let overflowButton = NSButton()
     /// 0.12.5: reminder bell (⏰). Shown only when a reminder is
     /// set on this note. Always visible (not hover-revealed) when
-    /// present — it carries semantic weight the other chrome icons
-    /// don't. Tinted `textColor.withAlphaComponent(0.85)` for
-    /// future reminders; clay-red when fired-but-not-cleared.
+    /// present.
+    ///
+    /// 0.12.13: relocated OUT of the chrome cluster into the top-
+    /// right corner as its own status affordance. Chrome (color/
+    /// share/overflow) still hover-reveals; bell is separate and
+    /// persistent. This corner is the "status column" — future
+    /// indicators like a shared badge stack here alongside it.
     let bellButton = NSButton()
+    /// 0.12.13: small clay-tinted dot next to the bell that
+    /// indicates the reminder is *armed*. Hidden when the bell is
+    /// hidden or when fired (bell tint goes clay-red then, no
+    /// double signal).
+    private let armedIndicator = NSView()
     let scrollView = NSScrollView()
     let textView: MarkdownNSTextView
     let markdownStorage: MarkdownTextStorage
@@ -219,19 +228,23 @@ final class NoteContentView: NSView {
                             centerAligned: true)
         header.addSubview(overflowButton)
 
-        // 0.12.5: bell button — starts hidden. Shown when a
-        // reminder is set (via `applyReminderState`). Added to the
-        // NoteContentView directly (not inside `header`) so it
-        // stays alpha-1 even when the header fades on mouse-exit.
-        // Its frame is still positioned inside the header's y-band
-        // in `layout()`.
-        // 0.12.7: outlined `bell` (not `bell.fill`) so the icon
-        // reads as hairline like the others. Sean: "should use all
-        // hairline icons to be consistent."
+        // 0.12.13: bell now lives in the fixed top-right STATUS
+        // corner (not inside the hover-revealed chrome cluster).
+        // Added to NoteContentView directly so its alpha isn't
+        // multiplied by header's fade. Frame positioned in
+        // `layout()` at bounds top-right.
         configureIconButton(bellButton, symbol: "bell",
                             tip: "Reminder", action: #selector(bellTapped),
                             opticalYOffset: 0)
         bellButton.isHidden = true
+
+        // Armed indicator: 5pt clay dot rendered via a solid layer.
+        // Hidden by default; toggled in applyReminderState alongside
+        // the bell.
+        armedIndicator.wantsLayer = true
+        armedIndicator.layer?.backgroundColor = NSColor.woojClay.cgColor
+        armedIndicator.layer?.cornerRadius = 2.5
+        armedIndicator.isHidden = true
 
         // --- Scroll + text view ---
         scrollView.drawsBackground = false
@@ -272,6 +285,10 @@ final class NoteContentView: NSView {
         // in the text view.
         addSubview(scrollView)
         addSubview(header)
+        // Status corner (bell + armed dot) is above header — never
+        // fades with chrome; taps land on the bell regardless of
+        // hover state.
+        addSubview(armedIndicator)
         // Bell is above the header (both z-order and semantically),
         // so it stays visible + interactive when the header fades.
         addSubview(bellButton)
@@ -362,6 +379,10 @@ final class NoteContentView: NSView {
     ///   - fired-but-not-cleared → bell shown, clay-red tinted
     func applyReminderState(hasReminder: Bool, fired: Bool) {
         bellButton.isHidden = !hasReminder
+        // Armed indicator: only shown when a reminder is pending
+        // (not fired). Once fired, the bell itself goes clay-red
+        // and the dot hides — no double signal.
+        armedIndicator.isHidden = !hasReminder || fired
         if hasReminder {
             let textColor = Appearance.text(for: colorToken)
             bellButton.contentTintColor = fired
@@ -526,26 +547,14 @@ final class NoteContentView: NSView {
                                    y: opticallyCenteredY(for: closeButton, baseCY: cy),
                                    width: iconSize, height: iconSize)
 
-        // Right cluster, filled right-to-left. 0.12.6: 4 or 5 icons
-        // depending on whether a reminder is set. Font is no
-        // longer here (moved to ⋯ menu).
-        // 0.12.8: each icon uses its optical y-nudge (see the
-        // opticalYOffset dict populated in setup).
+        // Right cluster, filled right-to-left. Bell moved to
+        // bottom-left in 0.12.13, so no chrome shift needed.
         let rightEdge = header.bounds.width - edgePad
         var x = rightEdge - iconSize
         overflowButton.frame = NSRect(x: x,
                                       y: opticallyCenteredY(for: overflowButton, baseCY: cy),
                                       width: iconSize, height: iconSize)
         x -= iconSize + iconGap
-        if !bellButton.isHidden {
-            // Bell lives in bounds space (not header space); nudge
-            // is applied in its own coord system too.
-            let bellBaseY = header.frame.origin.y + cy
-            bellButton.frame = NSRect(x: x,
-                                      y: opticallyCenteredY(for: bellButton, baseCY: bellBaseY),
-                                      width: iconSize, height: iconSize)
-            x -= iconSize + iconGap
-        }
         shareButton.frame = NSRect(x: x,
                                    y: opticallyCenteredY(for: shareButton, baseCY: cy),
                                    width: iconSize, height: iconSize)
@@ -554,6 +563,26 @@ final class NoteContentView: NSView {
                                    y: opticallyCenteredY(for: colorButton, baseCY: cy),
                                    width: iconSize, height: iconSize)
         _ = fontW
+
+        // 0.12.13: bell + armed dot in the fixed BOTTOM-LEFT STATUS
+        // corner. Opposite the resize grip (bottom-right) and clear
+        // of the top chrome band. Armed dot floats at the bell's
+        // top-right, badge-style.
+        if !bellButton.isHidden {
+            let statusPad: CGFloat = 10
+            let bellX = statusPad
+            let bellY = statusPad
+            bellButton.frame = NSRect(x: bellX, y: bellY,
+                                       width: iconSize, height: iconSize)
+
+            if !armedIndicator.isHidden {
+                let dotSize: CGFloat = 5
+                armedIndicator.frame = NSRect(
+                    x: bellX + iconSize - dotSize + 1,
+                    y: bellY + iconSize - dotSize + 1,
+                    width: dotSize, height: dotSize)
+            }
+        }
 
         // 0.12.12: shrink the scrollView so it leaves a 6pt gap at
         // the top of the sticky (below the sticky's top edge, above
