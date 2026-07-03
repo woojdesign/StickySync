@@ -27,6 +27,9 @@ final class NotesModel: ObservableObject {
 
     init(store: NoteStore) {
         self.store = store
+        // 0.10.5: auto-purge Recently Deleted items older than 30
+        // days before the first reload, so `notes` is post-purge.
+        RecentlyDeletedPurge.purge(store: store)
         reload()
         store.onChange = { [weak self] in
             Task { @MainActor in self?.reload() }

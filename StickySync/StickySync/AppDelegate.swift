@@ -46,6 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         setupStatusItem()
 
+        // 0.10.5: auto-purge anything in Recently Deleted older than
+        // 30 days. Runs before we start opening windows so the first
+        // pass through allNotes() reflects the post-purge state.
+        RecentlyDeletedPurge.purge(store: store)
+
         let notes = store.allNotes()
         if notes.isEmpty {
             let welcome = Note(
