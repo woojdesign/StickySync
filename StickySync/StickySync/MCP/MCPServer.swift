@@ -16,7 +16,18 @@ import NotesKit
 
 @MainActor
 final class MCPServer {
-    static let defaultPort: NWEndpoint.Port = 47823
+    /// 0.11.2: Debug uses a different port so a running Debug build
+    /// doesn't collide with the Release build's MCP server (which is
+    /// what Sean's Claude Code normally points at). Now both can run
+    /// side-by-side — Claude drives Debug on 47824 while Release
+    /// stays on 47823 for real MCP work against Sean's Prod store.
+    static let defaultPort: NWEndpoint.Port = {
+        #if DEBUG
+        return 47824
+        #else
+        return 47823
+        #endif
+    }()
 
     /// The store to dispatch tool calls against. Held weakly so the
     /// server doesn't keep the app's NoteStore alive on quit.
