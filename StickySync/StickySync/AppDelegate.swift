@@ -198,6 +198,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 0.11.4: DEBUG-only. Runs `log show --last 60s --predicate
+    /// 'process == "StickySync"'` and drops the output in the
+    /// clipboard. Faster than "open Console.app, filter, copy" for
+    /// pasting into a Claude session when a bug shows up.
+    @objc func copyRecentLogs(_ sender: NSMenuItem) {
+        let task = Process()
+        task.launchPath = "/usr/bin/log"
+        task.arguments = ["show", "--last", "60s",
+                          "--predicate", "process == \"StickySync\"",
+                          "--info", "--debug"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let out = String(data: data, encoding: .utf8) ?? "(no output)"
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(out, forType: .string)
+
+            let alert = NSAlert()
+            alert.messageText = "Logs copied."
+            alert.informativeText = "\(out.count) chars from the last 60s of StickySync logs are on your clipboard."
+            alert.runModal()
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Failed to capture logs."
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+
     /// 0.11.1: user toggled beta channel. Flip the state, then
     /// reflect it in the menu item's checkmark. Sparkle picks up
     /// the new feed URL + allowed-channels on its next check.
@@ -522,6 +557,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         betaItem.target = self
         betaItem.state = BetaChannel.isEnabled ? .on : .off
         appMenu.addItem(betaItem)
+        #endif
+
+        // 0.11.4: Debug-only "Copy Recent Logs" — captures the last
+        // 60 seconds of `log stream --process StickySync` output
+        // into the clipboard so Sean can paste it into a Claude
+        // session without opening Console.app.
+        #if DEBUG
+        let logsItem = NSMenuItem(title: "Copy Recent Logs (60s)",
+                                  action: #selector(copyRecentLogs(_:)),
+                                  keyEquivalent: "")
+        logsItem.target = self
+        appMenu.addItem(logsItem)
         #endif
         appMenu.addItem(.separator())
         appMenu.addItem(aiAccessMainMenuItem())
