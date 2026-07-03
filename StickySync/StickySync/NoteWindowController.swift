@@ -17,6 +17,13 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     /// by AppDelegate to soft-delete + show the Undo toast.
     var onRequestDelete: ((UUID) -> Void)?
 
+    /// 0.12.1: shared reminder store. Set by AppDelegate on
+    /// controller construction. Optional to keep tests simple —
+    /// missing store → /remind silently no-ops.
+    var reminderStore: ReminderStore?
+    private var reminderPopover: NSPopover?
+    private lazy var reminderChip = ReminderConfirmationChip()
+
     private var expandedHeight: CGFloat
     private var saveWorkItem: DispatchWorkItem?
     private static var cascadeIndex = 0
@@ -388,6 +395,11 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         note.content = noteView.markdownStorage.sourceString
         note.modifiedAt = Date()
         scheduleSave()
+
+        // 0.12.1: /remind detection. If the line containing the
+        // cursor is a /remind trigger, present the picker (once —
+        // don't re-present if it's already up).
+        maybeShowReminderPicker()
         // The text view's selection range is implicitly at the end of the
         // newly-typed character; refresh marker fade so freshly-typed
         // `**` / `_` etc. stay visible while editing.
@@ -629,6 +641,86 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
             saveNow()
             persistLayout()
         }
+    }
+
+    // MARK: - /remind (0.12.1)
+
+    /// Called after every text edit. Scans the current line for the
+    /// /remind trigger; if present AND the popover isn't already
+    /// showing, presents it. Caches the trigger's strip range on
+    /// the popover controller so we can strip the line on confirm
+    /// without re-scanning.
+    private func maybeShowReminderPicker() {
+        guard reminderPopover == nil else { return }
+        let text = noteView.textView.string
+        let cursor = noteView.textView.selectedRange().location
+        guard let match = RemindTrigger.detect(in: text, at: cursor) else {
+            return
+        }
+
+        let controller = RemindPickerController()
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = controller
+        reminderPopover = popover
+
+        controller.onConfirm = { [weak self, weak popover] fireAt in
+            guard let self else { return }
+            self.confirmReminder(fireAt: fireAt, stripRange: match.lineRangeToStrip)
+            popover?.performClose(nil)
+            self.reminderPopover = nil
+        }
+        controller.onCancel = { [weak self, weak popover] in
+            popover?.performClose(nil)
+            self?.reminderPopover = nil
+        }
+
+        // Anchor to the text view at the cursor. `firstRect(forCharacterRange:)`
+        // returns the glyph rect in screen coords; convert back to view.
+        let anchorRange = NSRange(location: min(cursor, (text as NSString).length),
+                                  length: 0)
+        var rect = noteView.textView.firstRect(forCharacterRange: anchorRange,
+                                                actualRange: nil)
+        // firstRect is in screen coords → convert to the text view's window,
+        // then to the text view's bounds.
+        if let window = noteView.textView.window {
+            rect = window.convertFromScreen(rect)
+            rect = noteView.textView.convert(rect, from: nil)
+        }
+        popover.show(relativeTo: rect,
+                     of: noteView.textView,
+                     preferredEdge: .maxY)
+    }
+
+    private func confirmReminder(fireAt: Date, stripRange: NSRange) {
+        // Strip the /remind line from the note text, then persist.
+        if let storage = noteView.textView.textStorage {
+            let safe = NSRange(location: min(stripRange.location, storage.length),
+                                length: min(stripRange.length,
+                                            max(0, storage.length - stripRange.location)))
+            storage.replaceCharacters(in: safe, with: "")
+        }
+        note.content = noteView.markdownStorage.sourceString
+        note.modifiedAt = Date()
+        scheduleSave()
+
+        // Store the reminder (Phase A: local-only via
+        // UserDefaultsReminderStore; Phase B: swap for CloudKit-
+        // backed NotesKit storage).
+        guard let store = reminderStore else { return }
+        let existing = store.reminder(for: note.id)
+        let reminder = Reminder(
+            id: existing?.id ?? UUID(),
+            noteID: note.id,
+            fireAt: fireAt,
+            isUrgent: existing?.isUrgent ?? false,
+            fired: false,
+            firedAt: nil
+        )
+        store.set(reminder)
+
+        // Floating confirmation pill above the sticky.
+        reminderChip.show(anchorFrame: window.frame, fireAt: fireAt)
     }
 
     // MARK: - Close

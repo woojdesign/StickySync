@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var listWindowController: NotesListWindowController?
     private var recentlyDeletedController: RecentlyDeletedWindowController?
+    /// 0.12.0: local-only reminder store. Phase A uses UserDefaults;
+    /// Phase B swaps for a CloudKit-backed implementation once
+    /// Sean can do the schema redeploy.
+    let reminderStore: ReminderStore = UserDefaultsReminderStore()
     private var mcpServer: MCPServer?
     private var mcpConfigWindow: NSWindow?
     private var voiceCapture: VoiceCaptureController?
@@ -253,6 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = NoteWindowController(note: note, store: store)
         controller.onRequestClose = { [weak self] id in self?.handleRequestClose(id) }
         controller.onRequestDelete = { [weak self] id in self?.handleRequestDelete(id) }
+        controller.reminderStore = reminderStore
         controllers[note.id] = controller
         controller.show(focus: focus)
     }
