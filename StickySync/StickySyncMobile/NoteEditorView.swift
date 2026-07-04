@@ -32,6 +32,13 @@ struct NoteEditorView: View {
     /// distinguish "no local changes worth keeping, just refresh to
     /// remote" from "user has typed, be careful with their edits."
     @State private var hasLocalEdits: Bool = false
+    /// 0.12.15: `/remind` sheet presentation state. `pendingTrigger`
+    /// captures the trigger-line range so we can strip it after the
+    /// user confirms a time.
+    @State private var showRemindSheet: Bool = false
+    @State private var pendingTrigger: RemindTrigger.Match?
+    @State private var confirmationText: String?
+    @State private var confirmationTask: Task<Void, Never>?
 
     init(note: Note) {
         _note = State(initialValue: note)
@@ -78,6 +85,12 @@ struct NoteEditorView: View {
             // check and wipes the in-flight paste/typing.
             note.modifiedAt = Date()
             scheduleSave()
+            // 0.12.15: /remind detection. Mirrors the Mac path in
+            // NoteWindowController.textDidChange — same trigger
+            // regex, same NL parser fall-through, same strip-line
+            // + confirmation flow. Presents a SwiftUI sheet instead
+            // of an AppKit popover.
+            maybeHandleRemindTrigger()
         }
         .onChange(of: model.notes) { _ in
             // Sync brought in a newer version. Apply it if we don't have
@@ -110,6 +123,19 @@ struct NoteEditorView: View {
             CloudShareSheet(note: note) { _ in
                 // Refresh so the shared-state indicator updates on the list.
                 model.reload()
+            }
+        }
+        .sheet(isPresented: $showRemindSheet) {
+            RemindPickerSheet(
+                onConfirm: { fireAt in confirmReminder(fireAt: fireAt) },
+                onCancel: { pendingTrigger = nil }
+            )
+        }
+        .overlay(alignment: .top) {
+            if let text = confirmationText {
+                ReminderConfirmationChip(text: text)
+                    .padding(.top, WoojSpace.md)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .toolbar {
@@ -302,5 +328,110 @@ struct NoteEditorView: View {
         // the merge-complexity tax.
         note = remote
         hasLocalEdits = false
+    }
+
+    // MARK: - /remind trigger handling (0.12.15)
+
+    private func maybeHandleRemindTrigger() {
+        // Only detect on newly-completed trigger lines, and don't
+        // re-detect while the sheet is already up.
+        guard !showRemindSheet, pendingTrigger == nil else { return }
+        // SwiftUI's TextEditor binding doesn't expose the cursor
+        // cheaply; use end-of-content as the cursor. Trigger fires
+        // when the user has just typed `/remind …` at the end.
+        let cursor = (note.content as NSString).length
+        guard let match = RemindTrigger.detect(in: note.content, at: cursor) else { return }
+
+        // NL parser first: `/remind tomorrow 9am` skips the sheet.
+        if let parsed = RemindNLParser.parse(match.freeText, now: Date()) {
+            pendingTrigger = match
+            confirmReminder(fireAt: parsed)
+        } else {
+            pendingTrigger = match
+            showRemindSheet = true
+        }
+    }
+
+    private func confirmReminder(fireAt: Date) {
+        guard let match = pendingTrigger else { return }
+        // Strip the /remind line from the content.
+        let ns = note.content as NSString
+        let stripped = ns.replacingCharacters(in: match.lineRangeToStrip, with: "")
+        note.content = stripped
+        note.modifiedAt = Date()
+        scheduleSave()
+
+        // Persist the reminder + schedule the notification.
+        let reminder = Reminder(id: UUID(), noteID: note.id, fireAt: fireAt,
+                                 isUrgent: false, firedAt: nil)
+        ReminderStoreProvider.shared.set(reminder)
+
+        // Ask for permission on first schedule; schedule regardless
+        // — a denied auth still leaves the reminder in the store, so
+        // Phase B (cross-device sync) picks it up on the Mac.
+        let previewNote = note
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
+                    scheduleUN(reminder: reminder, notePreview: previewNote.content)
+                }
+            } else {
+                scheduleUN(reminder: reminder, notePreview: previewNote.content)
+            }
+        }
+
+        // Confirmation chip
+        confirmationText = "Reminder set · \(formatFireAt(fireAt))"
+        confirmationTask?.cancel()
+        confirmationTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            withAnimation { confirmationText = nil }
+        }
+
+        pendingTrigger = nil
+    }
+
+    private func formatFireAt(_ date: Date) -> String {
+        let df = DateFormatter()
+        let cal = Calendar.current
+        if cal.isDate(date, inSameDayAs: Date()) {
+            df.dateFormat = "'today at' h:mm a"
+        } else if cal.isDateInTomorrow(date) {
+            df.dateFormat = "'tomorrow at' h:mm a"
+        } else {
+            df.dateFormat = "EEE, MMM d 'at' h:mm a"
+        }
+        return df.string(from: date)
+    }
+}
+
+// Free helper — keeps notifier calls out of the main body.
+@MainActor private func scheduleUN(reminder: Reminder, notePreview: String) {
+    let content = UNMutableNotificationContent()
+    content.title = "StickySync reminder"
+    content.body = ReminderNotifier.previewBody(from: notePreview)
+    content.sound = .default
+    let comps = Calendar.current.dateComponents(
+        [.year, .month, .day, .hour, .minute], from: reminder.fireAt)
+    let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+    let request = UNNotificationRequest(
+        identifier: reminder.id.uuidString,
+        content: content,
+        trigger: trigger)
+    UNUserNotificationCenter.current().add(request) { _ in }
+}
+
+/// Simple toast chip. Mirrors Mac ReminderConfirmationChip.
+struct ReminderConfirmationChip: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.system(size: 14, weight: .medium))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.thinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(WoojColor.line))
+            .shadow(color: WoojColor.ink.opacity(0.15), radius: 8, y: 2)
     }
 }
