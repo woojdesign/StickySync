@@ -160,7 +160,19 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
     }
 
     func close() {
-        saveWorkItem?.perform()
+        // 0.12.16: only flush pending edits if the note still exists
+        // in the store. If it has been soft-deleted (e.g., the user
+        // hit Delete Note in the ⋯ menu, which calls softDelete
+        // *before* close()), the pending save would run
+        // `store.update(self.note)` with `self.note.deletedAt == nil`
+        // (the controller's in-memory copy is stale), writing
+        // deletedAt=nil back over the tombstone and resurrecting
+        // the note. Pinned by CloseFlushesPendingSaveTests.
+        if store.note(id: note.id) != nil {
+            saveWorkItem?.perform()
+        } else {
+            saveWorkItem?.cancel()
+        }
         window.delegate = nil
         window.orderOut(nil)
     }
@@ -836,15 +848,12 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        // 0.12.6: font moved from the header cluster into the
-        // overflow menu — cuts an icon and eliminates the
-        // Aa-text-baseline-vs-SF-Symbol alignment mismatch.
-        let fontItem = NSMenuItem(title: "Change Font…",
-                                  action: #selector(fontFromOverflow),
-                                  keyEquivalent: "")
-        fontItem.target = self
-        menu.addItem(fontItem)
-        menu.addItem(.separator())
+        // 0.12.16: font restored to the chrome cluster (0.12.6
+        // move-into-menu reverted — Sean: "font should not be in
+        // 3 dot menu, and font change no longer works anyway").
+        // The showFontPopover anchor requires fontButton to be in
+        // the view hierarchy with a real frame; the menu path had
+        // a zero-frame anchor so the popover never appeared.
 
         let delete = NSMenuItem(title: "Delete Note",
                                 action: #selector(deleteFromOverflow),
@@ -868,10 +877,6 @@ final class NoteWindowController: NSObject, NSWindowDelegate, NSTextViewDelegate
 
     @objc private func deleteFromOverflow() {
         onRequestDelete?(note.id)
-    }
-
-    @objc private func fontFromOverflow() {
-        showFontPopover()
     }
 
     // MARK: - Layout persistence

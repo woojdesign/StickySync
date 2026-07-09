@@ -202,15 +202,11 @@ final class NoteContentView: NSView {
                             opticalYOffset: 0)
         header.addSubview(shareButton)
 
-        // 0.12.6: font (Aa) moved into the ⋯ overflow menu — Sean:
-        // "a lot of chrome and it's not really vertically aligned."
-        // Aa's text baseline never matched SF Symbol icon centers
-        // cleanly, and 6 icons was too dense. Chrome now caps at
-        // 5 (or 4 without an active reminder).
-        //
-        // fontButton stays declared/configured so tests + snapshots
-        // that reference it still compile, but it's no longer added
-        // as a subview.
+        // 0.12.16: font (Aa) restored to the chrome cluster after
+        // 0.12.6 sent it into the overflow menu. Menu path had a
+        // zero-frame popover anchor (fontButton wasn't in the view
+        // hierarchy) so the popover never appeared. Now back to a
+        // real chrome icon between color and share.
         fontButton.title = "Aa"
         fontButton.isBordered = false
         fontButton.bezelStyle = .regularSquare
@@ -218,6 +214,7 @@ final class NoteContentView: NSView {
         fontButton.target = self
         fontButton.action = #selector(fontTapped)
         fontButton.toolTip = "Change font"
+        header.addSubview(fontButton)
 
         configureIconButton(closeButton, symbol: "xmark",
                             tip: "Close note", action: #selector(closeTapped))
@@ -558,11 +555,17 @@ final class NoteContentView: NSView {
         shareButton.frame = NSRect(x: x,
                                    y: opticallyCenteredY(for: shareButton, baseCY: cy),
                                    width: iconSize, height: iconSize)
+        // 0.12.16: font restored between share and color. "Aa" is
+        // wider than an SF Symbol (fontW=24) so give it its own
+        // slot width; icon still lives on the shared cy baseline.
+        x -= fontW + iconGap
+        fontButton.frame = NSRect(x: x,
+                                   y: cy,
+                                   width: fontW, height: iconSize)
         x -= iconSize + iconGap
         colorButton.frame = NSRect(x: x,
                                    y: opticallyCenteredY(for: colorButton, baseCY: cy),
                                    width: iconSize, height: iconSize)
-        _ = fontW
 
         // 0.12.13: bell + armed dot in the fixed BOTTOM-LEFT STATUS
         // corner. Opposite the resize grip (bottom-right) and clear
