@@ -44,22 +44,27 @@ struct SavedView: View {
     }
 
     private var postPolishActions: some View {
-        HStack(spacing: WoojSpace.md) {
-            actionButton(title: "Copy & Delete",
-                         symbol: "doc.on.doc",
-                         tint: WoojColor.clay) { vm.copyAndDelete() }
-            actionButton(title: "Delete",
-                         symbol: "trash",
-                         tint: WoojColor.muted) { vm.deleteSaved() }
-            // 0.12.17: only shown when Sean has filled the dev-panel
-            // dashboard config. Primary surface for capture-to-
-            // dashboard per his ask ("more so than sending from a
-            // sticky in notes view").
+        // 0.12.19: two-row layout when dashboard capture is on.
+        // Send lives on its own top row (full-width, matches its
+        // role as the primary action per Sean's "more so than
+        // sending from a sticky in notes view"), and it has to
+        // accommodate the endpoint's long `did` string on success
+        // ("captured N items — review in the inbox") — a shared
+        // row with Copy/Delete truncated everything.
+        VStack(spacing: WoojSpace.sm) {
             if DashboardConfigStore.shared.current.isConfigured {
                 actionButton(title: sendLabel,
                              symbol: sendSymbol,
                              tint: WoojColor.clay) { vm.sendToDashboard() }
                     .disabled(vm.dashboardState == .sending)
+            }
+            HStack(spacing: WoojSpace.md) {
+                actionButton(title: "Copy & Delete",
+                             symbol: "doc.on.doc",
+                             tint: WoojColor.clay) { vm.copyAndDelete() }
+                actionButton(title: "Delete",
+                             symbol: "trash",
+                             tint: WoojColor.muted) { vm.deleteSaved() }
             }
         }
     }
