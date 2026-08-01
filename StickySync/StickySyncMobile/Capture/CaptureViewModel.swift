@@ -27,6 +27,15 @@ final class CaptureViewModel: ObservableObject {
     /// pick a different swatch on SavedView before the dismiss timer runs out,
     /// which writes through to the persisted note.
     @Published private(set) var savedColorToken: String = Palette.defaultToken
+    /// 0.12.17: dashboard-capture send state. Drives the third
+    /// post-polish chip button's label + symbol.
+    enum DashboardState: Equatable {
+        case idle
+        case sending
+        case sent(String)  // the endpoint's `did` string
+        case failed
+    }
+    @Published private(set) var dashboardState: DashboardState = .idle
 
     private let recorder = AudioRecorder()
     private let speech = SpeechTranscriber()
@@ -133,6 +142,53 @@ final class CaptureViewModel: ObservableObject {
         if let note = lastNote { writer.softDelete(note) }
         lastNote = nil
         dismissNow()
+    }
+
+    /// 0.12.17: POST the current transcript to the dashboard
+    /// capture endpoint. On success, apply the user's configured
+    /// afterSend action (keep sticky vs delete sticky). No queue,
+    /// no confirmation — the endpoint is idempotent-by-title so
+    /// retry is safe (and comes from the user tapping the button
+    /// again after a failure).
+    func sendToDashboard() {
+        let config = DashboardConfigStore.shared.current
+        let text = savedText
+        guard config.isConfigured, !text.isEmpty else { return }
+        dashboardState = .sending
+        // Prevent the 6s auto-dismiss from tearing the chip out
+        // from under the network round-trip.
+        dismissTask?.cancel()
+
+        Task { @MainActor in
+            do {
+                let response = try await DashboardCaptureClient.send(text, config: config)
+                dashboardState = .sent(response.did)
+                switch config.afterSend {
+                case .keep:
+                    // Restart the auto-dismiss with a bit longer so
+                    // the user has time to read the `did` receipt.
+                    scheduleDismiss(after: 3.5)
+                case .delete:
+                    // Give the receipt a beat, then delete + dismiss.
+                    try? await Task.sleep(nanoseconds: 800_000_000)
+                    deleteSaved()
+                }
+            } catch {
+                dashboardState = .failed
+                // Restart the auto-dismiss so the failure chip
+                // doesn't stick around forever; user can retry
+                // before it fires.
+                scheduleDismiss(after: 4)
+            }
+        }
+    }
+
+    private func scheduleDismiss(after seconds: TimeInterval) {
+        dismissTask?.cancel()
+        dismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            dismissNow()
+        }
     }
 
     /// Explicit dismiss (X tap) — keep the note, just close the
@@ -274,5 +330,6 @@ final class CaptureViewModel: ObservableObject {
     private func reset() {
         partialText = ""; savedText = ""; savedAt = nil
         elapsed = 0; level = 0; lastNote = nil; refining = false
+        dashboardState = .idle
     }
 }

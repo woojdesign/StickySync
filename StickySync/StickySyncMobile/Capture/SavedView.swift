@@ -51,6 +51,34 @@ struct SavedView: View {
             actionButton(title: "Delete",
                          symbol: "trash",
                          tint: WoojColor.muted) { vm.deleteSaved() }
+            // 0.12.17: only shown when Sean has filled the dev-panel
+            // dashboard config. Primary surface for capture-to-
+            // dashboard per his ask ("more so than sending from a
+            // sticky in notes view").
+            if DashboardConfigStore.shared.current.isConfigured {
+                actionButton(title: sendLabel,
+                             symbol: sendSymbol,
+                             tint: WoojColor.clay) { vm.sendToDashboard() }
+                    .disabled(vm.dashboardState == .sending)
+            }
+        }
+    }
+
+    private var sendLabel: String {
+        switch vm.dashboardState {
+        case .idle:            return "Send"
+        case .sending:         return "Sending…"
+        case .sent(let did):   return did
+        case .failed:          return "Send failed — retry"
+        }
+    }
+
+    private var sendSymbol: String {
+        switch vm.dashboardState {
+        case .idle:    return "paperplane"
+        case .sending: return "arrow.up.circle"
+        case .sent:    return "checkmark.circle"
+        case .failed:  return "exclamationmark.triangle"
         }
     }
 

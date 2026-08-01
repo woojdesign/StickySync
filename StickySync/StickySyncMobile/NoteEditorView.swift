@@ -176,6 +176,16 @@ struct NoteEditorView: View {
                     Button { UIPasteboard.general.string = note.content } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
+                    // 0.12.17: dashboard capture — secondary surface
+                    // (primary is the post-polish chip in Capture).
+                    // Only shown when the dev-panel config is filled.
+                    if DashboardConfigStore.shared.current.isConfigured {
+                        Button {
+                            Task { await sendCurrentNoteToDashboard() }
+                        } label: {
+                            Label("Send to Dashboard", systemImage: "paperplane")
+                        }
+                    }
                     Button(role: .destructive) {
                         model.delete(note); dismiss()
                     } label: { Label("Delete", systemImage: "trash") }
@@ -390,6 +400,37 @@ struct NoteEditorView: View {
         }
 
         pendingTrigger = nil
+    }
+
+    // MARK: - Dashboard capture (0.12.17)
+
+    /// Fire the POST and reuse the reminder confirmation chip for
+    /// the receipt. On success shows the endpoint's `did` string
+    /// verbatim; on failure shows a retry-hint. Deletes or keeps
+    /// the sticky based on the dev-panel afterSend choice.
+    private func sendCurrentNoteToDashboard() async {
+        let config = DashboardConfigStore.shared.current
+        confirmationText = "Sending to dashboard…"
+        confirmationTask?.cancel()
+        do {
+            let response = try await DashboardCaptureClient.send(note.content, config: config)
+            confirmationText = response.did
+            confirmationTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                withAnimation { confirmationText = nil }
+            }
+            if config.afterSend == .delete {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                model.delete(note)
+                dismiss()
+            }
+        } catch {
+            confirmationText = "Send failed — tap to retry"
+            confirmationTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                withAnimation { confirmationText = nil }
+            }
+        }
     }
 
     private func formatFireAt(_ date: Date) -> String {

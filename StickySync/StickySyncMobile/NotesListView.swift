@@ -18,6 +18,12 @@ struct NotesListView: View {
     @State private var search = ""
     @State private var capturing = false
     @State private var reportingSync = false
+    /// 0.12.17: 5-tap on the "Notes" title unlocks the DevPanel
+    /// (dashboard capture config; other dev-only knobs later).
+    /// Apple-canonical hidden-panel gesture (Music app uses it).
+    @State private var showDevPanel = false
+    @State private var titleTapCount = 0
+    @State private var titleTapResetTask: Task<Void, Never>?
     /// Cards vs. List. Persisted per device — switching surfaces is a
     /// preference, not state we sync across devices (the Mac all-notes
     /// view is its own thing, so cross-device alignment isn't a goal).
@@ -111,6 +117,7 @@ struct NotesListView: View {
         .sheet(isPresented: $reportingSync) {
             SyncReportComposerView(currentSyncState: syncStateString(sync.state))
         }
+        .sheet(isPresented: $showDevPanel) { DevPanel() }
         .onReceive(NotificationCenter.default.publisher(for: .startCapture)) { _ in
             // If the editor is already presented as a fullScreenCover, raising
             // the capture cover does nothing — SwiftUI shows one cover at a
@@ -153,6 +160,7 @@ struct NotesListView: View {
                 Text("Notes")
                     .font(.custom(WoojType.reading.family, size: 34).weight(.semibold))
                     .foregroundStyle(WoojColor.ink)
+                    .onTapGesture { handleTitleTap() }
                 HStack(spacing: 6) {
                     Text("^[\(model.notes.count) note](inflect: true)")
                     // Only surface the sync line when there's something to
@@ -325,6 +333,23 @@ struct NotesListView: View {
                     Label("Delete", systemImage: "trash")
                 }
             }
+    }
+
+    /// 5-tap on "Notes" title within 2s unlocks the hidden dev
+    /// panel. Counter resets on a 2s pause between taps so a stray
+    /// double-tap doesn't accumulate over minutes.
+    private func handleTitleTap() {
+        titleTapCount += 1
+        titleTapResetTask?.cancel()
+        if titleTapCount >= 5 {
+            titleTapCount = 0
+            showDevPanel = true
+            return
+        }
+        titleTapResetTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            titleTapCount = 0
+        }
     }
 
     /// Route a sync-status tap to the most useful next action for the
